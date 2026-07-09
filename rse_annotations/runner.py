@@ -17,6 +17,7 @@ from typing import Callable, Dict, List, Optional
 from . import checks as _checks
 from .discovery import discover
 from .fable import FableStatus, Snippet, functional_review
+from .formula import FormulaResult, infer_formula, render_formula
 from .registry import AnnotationInfo
 
 
@@ -41,6 +42,7 @@ class FunctionReport:
 class Report:
     functions: List[FunctionReport] = field(default_factory=list)
     snippets: List[Snippet] = field(default_factory=list)
+    formulas: List[FormulaResult] = field(default_factory=list)
     fable: Optional[FableStatus] = None
 
     # ---- aggregate accessors ------------------------------------------- #
@@ -81,6 +83,18 @@ class Report:
                     }
                     for s in self.snippets
                 ],
+                "formulas": [
+                    {
+                        "name": f.name,
+                        "location": f.location,
+                        "ast_forms": f.ast_forms,
+                        "sympy_form": f.sympy_form,
+                        "sympy_latex": f.sympy_latex,
+                        "latexify_form": f.latexify_form,
+                        "notes": f.notes,
+                    }
+                    for f in self.formulas
+                ],
             },
         }
 
@@ -96,12 +110,14 @@ class Runner:
         generate_stubs: bool = True,
         probe: bool = True,
         effort: str = "medium",
+        infer_formulas: bool = True,
     ) -> None:
         self.target = target
         self.fixtures = fixtures or {}
         self.generate_stubs = generate_stubs
         self.probe = probe
         self.effort = effort
+        self.infer_formulas = infer_formulas
 
     def run(self) -> Report:
         infos: List[AnnotationInfo] = discover(self.target)
@@ -128,6 +144,11 @@ class Runner:
         )
         report.snippets = snippets
         report.fable = status
+
+        if self.infer_formulas:
+            report.formulas = [
+                infer_formula(i) for i in infos if i.kind == "functional"
+            ]
         return report
 
 
@@ -158,6 +179,17 @@ def render_text(report: Report, *, show_snippets: bool = True) -> str:
             state = "available" if report.fable.available else "unavailable"
             lines.append(f"  Fable stub generation: {state} ({report.fable.reason})")
         lines.append("")
+
+    # Inferred formulas (formal-methods / symbolic inspection)
+    if report.formulas:
+        lines.append("-" * 70)
+        lines.append("Inferred formulas (for human inspection -- NOT a correctness proof):")
+        lines.append("")
+        for fr in report.formulas:
+            lines.append(render_formula(fr))
+            lines.append("")
+
+    if report.snippets:
         for s in report.snippets:
             lines.append(f"--- {s.signature}  ({s.location}) ---")
             if show_snippets:

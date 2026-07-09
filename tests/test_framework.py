@@ -123,6 +123,38 @@ def test_runner_end_to_end_on_example():
     assert report.fable is not None and not report.fable.available
 
 
+def test_formula_inference_ast_and_sympy():
+    from rse_annotations.formula import infer_formula
+
+    @functional
+    def rescale(x, lo, hi):
+        "affine rescale"
+        return lo + x * (hi - lo)
+
+    res = infer_formula(annotation_of(rescale))
+    assert res.ast_forms, "AST backend should always render a return expression"
+    assert "lo" in res.ast_forms[0] and "hi" in res.ast_forms[0]
+    # sympy is a dev dependency; if present it should simplify to a closed form.
+    try:
+        import sympy  # noqa: F401
+        assert res.sympy_form is not None
+    except ImportError:
+        pass
+
+
+def test_formula_inference_handles_non_arithmetic_gracefully():
+    from rse_annotations.formula import infer_formula
+
+    @functional
+    def pick(items):
+        "not scalar arithmetic"
+        return [x for x in items if x]
+
+    res = infer_formula(annotation_of(pick))
+    # Must not raise; sympy simply reports it does not apply.
+    assert isinstance(res.notes, list)
+
+
 def test_fable_available_without_key(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     status = fable_available(probe=False)

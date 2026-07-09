@@ -32,6 +32,19 @@ _WRITE_CALLS = {"write", "writelines", "write_text", "write_bytes", "dump", "dum
                 "save", "to_csv", "to_json", "send", "flush"}
 _IO_HINT_CALLS = _READ_CALLS | _WRITE_CALLS | {"print"}
 
+# Name *prefixes* that also indicate reads / writes (catches pandas & friends:
+# read_csv, read_parquet, to_csv, to_markdown, to_parquet, ...).
+_READ_PREFIXES = ("read_", "load_")
+_WRITE_PREFIXES = ("write_", "to_", "save_", "dump_")
+
+
+def _is_read_name(name: str) -> bool:
+    return name in _READ_CALLS or name.startswith(_READ_PREFIXES)
+
+
+def _is_write_name(name: str) -> bool:
+    return name in _WRITE_CALLS or name.startswith(_WRITE_PREFIXES)
+
 
 @dataclass
 class CheckResult:
@@ -105,7 +118,9 @@ def check_placement(info: AnnotationInfo) -> CheckResult:
     called = _called_names(node)
 
     if info.kind == "functional":
-        offenders = sorted(called & _IO_HINT_CALLS)
+        offenders = sorted(
+            n for n in called
+            if n in _IO_HINT_CALLS or _is_read_name(n) or _is_write_name(n))
         if offenders:
             return CheckResult(
                 "placement", "fail",
@@ -113,13 +128,13 @@ def check_placement(info: AnnotationInfo) -> CheckResult:
         return CheckResult("placement", "pass", "no I/O detected; looks pure")
 
     if info.kind == "data_input":
-        if called & _READ_CALLS:
+        if any(_is_read_name(n) for n in called):
             return CheckResult("placement", "pass", "contains a read call")
         return CheckResult("placement", "warn",
                            "no obvious read call found in @data_input body")
 
     if info.kind == "data_output":
-        if called & _WRITE_CALLS:
+        if any(_is_write_name(n) for n in called):
             return CheckResult("placement", "pass", "contains a write call")
         return CheckResult("placement", "warn",
                            "no obvious write call found in @data_output body")

@@ -14,7 +14,8 @@ dependencies = []
 
 [project.optional-dependencies]
 fable = ["anthropic>=0.40"]
-dev = ["pytest>=7", "anthropic>=0.40"]
+formula = ["sympy>=1.12", "latexify-py>=0.4"]
+dev = ["pytest>=7", "anthropic>=0.40", "sympy>=1.12", "latexify-py>=0.4"]
 
 [project.scripts]
 rse-annotations = "rse_annotations.cli:main"

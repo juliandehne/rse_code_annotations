@@ -70,6 +70,17 @@ set), `--effort {low,medium,high,xhigh,max}`.
 The integration uses server-side refusal fallback to `claude-opus-4-8` by default and
 requires 30-day data retention (it will not run under zero-data-retention).
 
+## Formula inference for `@functional`
+
+For every `@functional` the runner also **infers the mathematical formula from the code
+and prints it for inspection** (never a correctness proof). Three backends run
+best-effort: AST rendering (no deps), SymPy symbolic execution (`pip install sympy`),
+and latexify (`pip install latexify-py`). Install both with `pip install -e ".[formula]"`.
+See [`FORMULA_INFERENCE.md`](FORMULA_INFERENCE.md) for the landscape (why symbolic
+tools recover closed forms for scalar arithmetic, why Krippendorff's α needs a reference
+implementation instead, and where formal verifiers like Dafny/Why3/Coq fit). Disable
+with `--no-formulas`.
+
 ## Test
 
 ```bash

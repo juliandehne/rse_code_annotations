@@ -50,6 +50,8 @@ def main(argv: Optional[list] = None) -> int:
                      help="module:attribute pointing at a dict of I/O fixtures")
     run.add_argument("--no-snippets", action="store_true",
                      help="omit full source snippets from text output")
+    run.add_argument("--no-formulas", action="store_true",
+                     help="skip formula inference for @functional code")
 
     args = parser.parse_args(argv)
 
@@ -61,6 +63,7 @@ def main(argv: Optional[list] = None) -> int:
             generate_stubs=not args.no_stubs,
             probe=not args.no_probe,
             effort=args.effort,
+            infer_formulas=not args.no_formulas,
         )
         report = runner.run()
         if args.json:
