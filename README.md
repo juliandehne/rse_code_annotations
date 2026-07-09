@@ -1,0 +1,77 @@
+# rse_code_annotations
+
+Role **annotations** for (generated) Python code, plus a **runner** that checks the
+annotations hold and helps you review the maths.
+
+See [`CONCEPT.md`](CONCEPT.md) for the full design rationale.
+
+## Install
+
+```bash
+pip install -e .            # core, no dependencies
+pip install -e ".[fable]"   # + anthropic SDK for Fable test-stub generation
+```
+
+## The four annotations
+
+```python
+from rse_annotations import functional, mapping, data_input, data_output
+
+@functional
+def normalize(v, lo, hi):
+    "Scale v into [0,1]. :param v: :param lo: :param hi: :returns:"
+    return (v - lo) / (hi - lo)
+
+@data_input(fields={"path": "CSV to read", "rows": "parsed records"})
+def load_csv(path):
+    "Read rows. :param path: :returns rows:"
+    with open(path) as fh:
+        ...
+```
+
+| Annotation     | Means                                          | Runner checks |
+| -------------- | ---------------------------------------------- | ------------- |
+| `@functional`  | pure mathematical function                     | purity (no I/O); emits a review snippet + optional test stub |
+| `@mapping`     | transforms one format/object into another      | has docstring; documents declared fields |
+| `@data_input`  | boundary where data enters (reads a file)      | actually reads a file; documents fields |
+| `@data_output` | boundary where data leaves (writes a file)     | actually writes a file; documents fields |
+
+## Run the checker
+
+```bash
+# text report
+python -m rse_annotations.cli run examples.sample_pipeline \
+    --fixtures examples.fixtures:FIXTURES
+
+# JSON, and skip Fable entirely
+python -m rse_annotations.cli run examples.sample_pipeline --no-stubs --json
+```
+
+Exit code is `0` when no check fails, `1` otherwise — usable in CI.
+
+### Fixtures (for the I/O-success check)
+
+Boundary functions (`@data_input` / `@data_output`) are *invoked* in a sandbox to
+confirm they really read/write. Supply a `dict` mapping function name → a
+`fixture(tmpdir, tracer) -> (args, kwargs)` callable (see `examples/fixtures.py`).
+Without a fixture the I/O check is reported as `WARN` (cannot invoke safely).
+
+## Fable-assisted `@functional` review
+
+For every `@functional`, the runner prints the source as a **review snippet**. If
+**Claude Fable 5** is available (the `anthropic` SDK is installed, `ANTHROPIC_API_KEY`
+is set, and a probe call succeeds), it also drafts a `pytest` **stub** per snippet —
+scaffolding with `# TODO` asserts and property-test ideas, never fabricated expected
+values. If Fable is unavailable the runner degrades to snippet-only mode and says why.
+
+Flags: `--no-stubs` (never call Fable), `--no-probe` (assume available if a key is
+set), `--effort {low,medium,high,xhigh,max}`.
+
+The integration uses server-side refusal fallback to `claude-opus-4-8` by default and
+requires 30-day data retention (it will not run under zero-data-retention).
+
+## Test
+
+```bash
+pytest        # network-free; Fable calls are disabled in tests
+```
