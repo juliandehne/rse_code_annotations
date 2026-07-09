@@ -15,9 +15,12 @@ pip install -e ".[fable]"   # + anthropic SDK for Fable test-stub generation
 
 The base install has **no dependencies**: after `pip install` you can import and
 apply the four annotations right away. The optional extras only add the heavier
-`run`-time analysis (formula inference, Fable). Installing also puts the
-`rse-annotations` console command on your PATH — a locally pip-installed library
-*can* ship a runnable script, and this one does (see `[project.scripts]`).
+`run`-time analysis (formula inference, Fable).
+
+The runner is invoked with `python -m rse_annotations.cli` — this needs nothing on
+your PATH; the interpreter finds the installed package via `site-packages`. (A
+`rse-annotations` console script is also installed for convenience, but using it as
+a bare command requires Python's `Scripts` dir on PATH, so the docs use `python -m`.)
 
 ## The four annotations
 
@@ -43,22 +46,22 @@ def load_csv(path):
 | `@data_input`  | boundary where data enters (reads a file)      | actually reads a file; documents fields |
 | `@data_output` | boundary where data leaves (writes a file)     | actually writes a file; documents fields |
 
-## The `rse-annotations` command
+## The runner
 
-The console command has three subcommands. It works on **any** target: name an
-importable module and (if it lives outside the cwd) point `--path` at its source
-root. The target is never installed — it is just added to `sys.path` and imported
-for inspection.
+The runner has three subcommands. It works on **any** target: name an importable
+module and (if it lives outside the cwd) point `--path` at its source root. The
+target is never installed — it is just added to `sys.path` and imported for
+inspection.
 
 ```bash
 # 1. What can I annotate?  Lists the kinds so you can choose one to apply.
-rse-annotations kinds
+python -m rse_annotations.cli kinds
 
 # 2. What is already annotated?  Inventories EXISTING annotations in a target.
-rse-annotations list mypkg --path src
+python -m rse_annotations.cli list mypkg --path src
 
 # 3. Do the annotations hold?  Full checks + formula inference + Fable.
-rse-annotations run  mypkg --path src --fixtures mypkg.fixtures:FIXTURES
+python -m rse_annotations.cli run mypkg --path src --fixtures mypkg.fixtures:FIXTURES
 ```
 
 `kinds` and `list` are the menu the newcomer starts with: `kinds` prints the four
@@ -67,13 +70,12 @@ functions already carry an annotation, grouped by kind. `run` is the full checke
 
 ```bash
 # text report
-rse-annotations run examples.sample_pipeline --fixtures examples.fixtures:FIXTURES
+python -m rse_annotations.cli run examples.sample_pipeline --fixtures examples.fixtures:FIXTURES
 
 # JSON, and skip Fable entirely
-rse-annotations run examples.sample_pipeline --no-stubs --json
+python -m rse_annotations.cli run examples.sample_pipeline --no-stubs --json
 ```
 
-(Equivalently `python -m rse_annotations.cli <subcommand> ...` without installing.)
 The `run` exit code is `0` when no check fails, `1` otherwise — usable in CI.
 
 ### Fixtures (for the I/O-success check)

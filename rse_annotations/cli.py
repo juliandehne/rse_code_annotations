@@ -1,23 +1,23 @@
 """Command-line entry point.
 
-After ``pip install rse-code-annotations`` (no extras needed to use the
-annotations) this is available as the ``rse-annotations`` console command -- yes,
-a locally pip-installed library can ship a runnable script; that is exactly what
-the ``[project.scripts]`` entry point does. It is also runnable as
-``python -m rse_annotations.cli``.
+After ``pip install`` the runner is invoked with ``python -m rse_annotations.cli``.
+This needs nothing on your PATH -- the interpreter finds the installed package via
+``site-packages``. (A ``rse-annotations`` console script is also installed by the
+``[project.scripts]`` entry point, but using it as a bare command requires Python's
+``Scripts`` dir on PATH, so the docs use the ``python -m`` form.)
 
 Subcommands::
 
-    rse-annotations kinds                       # the annotation types you can apply
-    rse-annotations list  mypkg --path src      # inventory EXISTING annotations in a target
-    rse-annotations run   mypkg --path src      # full checks + formula inference + Fable
+    python -m rse_annotations.cli kinds                    # the annotation types you can apply
+    python -m rse_annotations.cli list mypkg --path src     # inventory EXISTING annotations in a target
+    python -m rse_annotations.cli run  mypkg --path src     # full checks + formula inference + Fable
 
 Examples::
 
-    rse-annotations list compute_icr krippendorff_reference --path src
-    rse-annotations run  examples.sample_pipeline
-    rse-annotations run  mypkg --json
-    rse-annotations run  mypkg --no-stubs        # skip Fable entirely
+    python -m rse_annotations.cli list compute_icr krippendorff_reference --path src
+    python -m rse_annotations.cli run  examples.sample_pipeline
+    python -m rse_annotations.cli run  mypkg --json
+    python -m rse_annotations.cli run  mypkg --no-stubs     # skip Fable entirely
 
 The target library is not installed; it is simply *added to the path* and imported
 for inspection. The current working directory is on ``sys.path`` automatically, so
@@ -74,8 +74,8 @@ def _cmd_kinds() -> int:
     lines.append("Import them from the installed library and decorate your functions:")
     lines.append("    from rse_annotations import functional, mapping, data_input, data_output")
     lines.append("")
-    lines.append("Then inventory them with:   rse-annotations list <your-module> --path <src>")
-    lines.append("Or run the full checks with: rse-annotations run  <your-module> --path <src>")
+    lines.append("Then inventory them with:   python -m rse_annotations.cli list <your-module> --path <src>")
+    lines.append("Or run the full checks with: python -m rse_annotations.cli run  <your-module> --path <src>")
     print("\n".join(lines))
     return 0
 
@@ -89,7 +89,7 @@ def _cmd_list(targets: List[str], paths: Optional[List[str]]) -> int:
     infos = discover_many(targets)
     if not infos:
         print(f"No existing annotations found in: {', '.join(targets)}")
-        print("(Import rse_annotations and decorate functions; see `rse-annotations kinds`.)")
+        print("(Import rse_annotations and decorate functions; see `python -m rse_annotations.cli kinds`.)")
         return 0
 
     print(f"Existing annotations in {', '.join(targets)} -- {len(infos)} found:\n")
@@ -128,7 +128,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
 
 def main(argv: Optional[list] = None) -> int:
-    parser = argparse.ArgumentParser(prog="rse-annotations", description=__doc__,
+    parser = argparse.ArgumentParser(prog="python -m rse_annotations.cli", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
 
