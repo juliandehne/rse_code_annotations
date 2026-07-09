@@ -15,6 +15,17 @@ from typing import Callable, Dict, List, Optional
 #: The four roles a function can be annotated with.
 KINDS = ("functional", "mapping", "data_input", "data_output")
 
+#: One-line guidance per kind: what it means and when to reach for it. Used by the
+#: ``rse-annotations kinds`` command so a user can choose which annotation to apply.
+KIND_HELP = {
+    "functional": ("a pure mathematical function -- deterministic, no I/O, no globals. "
+                   "Its formula can be inferred and it can be differentially verified."),
+    "mapping": ("transforms one in-memory data shape/format into another "
+                "(parsing, encoding, reshaping). Not an I/O boundary."),
+    "data_input": "a boundary where data enters the system: reads a file / source.",
+    "data_output": "a boundary where data leaves the system: writes a file / sink.",
+}
+
 
 @dataclass
 class AnnotationInfo:

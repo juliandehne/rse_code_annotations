@@ -226,3 +226,36 @@ def test_fable_available_without_key(monkeypatch):
     # Either SDK missing or key missing -> unavailable, with a reason.
     assert not status.available
     assert status.reason
+
+
+def test_cli_kinds_lists_every_kind(capsys):
+    from rse_annotations.cli import main
+    from rse_annotations.registry import KINDS
+
+    assert main(["kinds"]) == 0
+    out = capsys.readouterr().out
+    for kind in KINDS:
+        assert f"@{kind}" in out
+    # the import hint should point the user at the installed library
+    assert "from rse_annotations import" in out
+
+
+def test_cli_list_inventories_existing_annotations(capsys):
+    from rse_annotations.cli import main
+
+    assert main(["list", "examples.sample_pipeline"]) == 0
+    out = capsys.readouterr().out
+    assert "found" in out
+    # groups the discovered annotations by kind
+    assert "@functional" in out and "@data_input" in out
+    # names the actual annotated functions
+    assert "normalize" in out and "load_csv" in out
+
+
+def test_cli_list_reports_when_target_has_none(capsys):
+    from rse_annotations.cli import main
+
+    # a stdlib module with no rse annotations
+    assert main(["list", "json"]) == 0
+    out = capsys.readouterr().out
+    assert "No existing annotations found" in out
