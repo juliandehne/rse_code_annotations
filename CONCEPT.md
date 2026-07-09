@@ -107,7 +107,7 @@ stub built from the function's **kind pattern** — purely mechanical, no model:
 
 Every stub body calls `pytest.skip("TODO: ...")`, so a generated test never silently
 passes until the author fills it in — it cannot bless wrong maths. Files are written to
-`<path>/test_stubs/test_<module>.py`.
+`<path>/tests/test_<module>.py` (the conventional Python test location).
 
 `--inspect` / `--stubs` jump straight to one option and skip the menu.
 

@@ -28,7 +28,7 @@ from .registry import REGISTRY, AnnotationInfo
 
 #: Directories never walked when discovering annotations under a path root.
 _SKIP_DIRS = {"__pycache__", ".git", ".hg", ".svn", ".venv", "venv", "env",
-              "node_modules", ".mypy_cache", ".pytest_cache", "test_stubs",
+              "node_modules", ".mypy_cache", ".pytest_cache", "tests", "test_stubs",
               ".ipynb_checkpoints", "build", "dist"}
 
 

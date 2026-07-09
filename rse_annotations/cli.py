@@ -15,7 +15,7 @@ It discovers the annotations, then offers exactly two actions:
        code* for mathematical correctness.
 
     2) Generate unit-test stubs -- for every annotation, emit a pattern-based
-       ``pytest`` scaffold (no LLM required) under ``<path>/test_stubs/``.
+       ``pytest`` scaffold (no LLM required) under ``<path>/tests/``.
 
 Pass ``--inspect`` or ``--stubs`` to pick an action directly and skip the menu.
 """
@@ -44,7 +44,7 @@ def _choose(input_fn: Callable[[str], str], output_fn: Callable[[str], None]) ->
     output_fn("")
     output_fn("Choose an action:")
     output_fn("  1) Inspect @functional annotations   (accept/decline each -> inspection.yaml)")
-    output_fn("  2) Generate unit-test stubs for all annotations   (-> test_stubs/)")
+    output_fn("  2) Generate unit-test stubs for all annotations   (-> tests/)")
     while True:
         try:
             choice = input_fn("> ").strip().lower()
@@ -66,7 +66,7 @@ def _do_inspect(infos, root: Path, input_fn, output_fn) -> int:
 
 
 def _do_stubs(infos, root: Path, output_fn) -> int:
-    out_dir = root / "test_stubs"
+    out_dir = root / "tests"
     files = generate_stub_files(infos, out_dir)
     if not files:
         output_fn("No annotations found; nothing to scaffold.")

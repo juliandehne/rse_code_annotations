@@ -80,7 +80,7 @@ generated from the per-kind pattern — `@functional` gets a determinism check p
 expected-value scaffold (with the inferred formula as a comment); `@mapping` a
 shape-transform check; `@data_input`/`@data_output` a `tmp_path` read/write check.
 Every stub body calls `pytest.skip(...)`, so nothing silently passes until you fill
-it in. Files are written to `<root>/test_stubs/test_<module>.py`.
+it in. Files are written to `<root>/tests/test_<module>.py` (Python convention).
 
 You can skip the menu with `--inspect` or `--stubs`:
 

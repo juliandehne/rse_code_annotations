@@ -274,7 +274,7 @@ def test_generate_stub_files_covers_every_kind(tmp_path):
 
     _write_sample(tmp_path, "pkg_stub")
     infos = discover_path(tmp_path)
-    files = generate_stub_files(infos, tmp_path / "test_stubs")
+    files = generate_stub_files(infos, tmp_path / "tests")
     assert files
     blob = "\n".join(sf.content for sf in files)
     # one test per annotation, each a skipped scaffold
@@ -337,7 +337,7 @@ def test_cli_stubs_mode_writes_files(tmp_path):
     msgs = []
     rc = main([str(tmp_path), "--stubs"], output_fn=msgs.append)
     assert rc == 0
-    stub_dir = tmp_path / "test_stubs"
+    stub_dir = tmp_path / "tests"
     assert stub_dir.is_dir()
     assert list(stub_dir.glob("test_*.py"))
 
@@ -368,7 +368,7 @@ def test_cli_menu_dispatches_on_choice(tmp_path):
         output_fn=lambda _m: None,
     )
     assert rc == 0
-    assert (tmp_path / "test_stubs").is_dir()
+    assert (tmp_path / "tests").is_dir()
 
 
 def test_cli_reports_empty_directory(tmp_path):
