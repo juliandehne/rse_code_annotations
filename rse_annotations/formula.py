@@ -23,9 +23,10 @@ Backends (each best-effort, independently optional):
 3. **latexify** (optional, ``pip install latexify-py``) — a dedicated AST→LaTeX
    converter for Python functions; complements (1) with publication-quality output.
 
-4. **Claude Fable 5** (optional) — for code the symbolic tools cannot handle (loops
-   over matrices, library calls like Krippendorff's alpha), ask the model to state
-   the formula in words/LaTeX. This is an *inference*, not a proof — flagged as such.
+For code the symbolic backends cannot handle (loops over matrices, library calls
+like Krippendorff's alpha), formula inference does not apply — reach for the
+differential-testing harness (``differential_check``) to pin correctness against a
+trusted reference instead.
 
 On the wider landscape (documented in FORMULA_INFERENCE.md): formal-methods tools
 (Dafny, Why3, Coq/Isabelle, KeY) *verify code against a specification you write* —

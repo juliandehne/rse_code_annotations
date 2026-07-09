@@ -1,174 +1,134 @@
-"""Command-line entry point.
+"""Command-line entry point -- an interactive, two-option tool.
 
-After ``pip install`` the runner is invoked with ``python -m rse_annotations.cli``.
-This needs nothing on your PATH -- the interpreter finds the installed package via
-``site-packages``. (A ``rse-annotations`` console script is also installed by the
-``[project.scripts]`` entry point, but using it as a bare command requires Python's
-``Scripts`` dir on PATH, so the docs use the ``python -m`` form.)
+Invoke with ``python -m rse_annotations.cli`` (needs nothing on your PATH). Point it
+at a directory of code that uses the four annotations; if you give no path, the
+current directory is used::
 
-Subcommands::
+    python -m rse_annotations.cli                 # scan the current directory
+    python -m rse_annotations.cli path/to/src     # scan a specific directory
 
-    python -m rse_annotations.cli kinds                    # the annotation types you can apply
-    python -m rse_annotations.cli list mypkg --path src     # inventory EXISTING annotations in a target
-    python -m rse_annotations.cli run  mypkg --path src     # full checks + formula inference + Fable
+It discovers the annotations, then offers exactly two actions:
 
-Examples::
+    1) Inspect @functional annotations -- step through each one, see its source and
+       inferred formula, and accept or decline it. Verdicts are written to
+       ``<path>/inspection.yaml``. The point is to make it easy to *review generated
+       code* for mathematical correctness.
 
-    python -m rse_annotations.cli list compute_icr krippendorff_reference --path src
-    python -m rse_annotations.cli run  examples.sample_pipeline
-    python -m rse_annotations.cli run  mypkg --json
-    python -m rse_annotations.cli run  mypkg --no-stubs     # skip Fable entirely
+    2) Generate unit-test stubs -- for every annotation, emit a pattern-based
+       ``pytest`` scaffold (no LLM required) under ``<path>/test_stubs/``.
 
-The target library is not installed; it is simply *added to the path* and imported
-for inspection. The current working directory is on ``sys.path`` automatically, so
-you can run from your project root and name top-level modules directly. Use
-``--path DIR`` (repeatable) to add further source roots (e.g. ``--path src``).
+Pass ``--inspect`` or ``--stubs`` to pick an action directly and skip the menu.
 """
 
 from __future__ import annotations
 
 import argparse
-import importlib
-import os
 import sys
-from typing import Callable, Dict, List, Optional
+from pathlib import Path
+from typing import Callable, List, Optional
 
-from .discovery import discover_many
-from .registry import KIND_HELP, KINDS
-from .runner import Runner, render_json, render_text
-
-
-def _prepare_sys_path(paths: Optional[List[str]]) -> None:
-    """Prepend the cwd and any ``--path`` dirs to ``sys.path`` for imports."""
-    roots = [os.getcwd()] + list(paths or [])
-    for root in reversed(roots):
-        abs_root = os.path.abspath(root)
-        if abs_root not in sys.path:
-            sys.path.insert(0, abs_root)
+from .discovery import discover_path
+from .inspection import run_inspection
+from .registry import AnnotationInfo, KINDS
+from .stubs import generate_stub_files
 
 
-def _load_fixtures(dotted: Optional[str]) -> Dict[str, Callable]:
-    """Load a fixtures mapping from ``module:attribute`` (a dict of qualname->fixture)."""
-    if not dotted:
-        return {}
-    mod_name, _, attr = dotted.partition(":")
-    if not attr:
-        raise SystemExit(f"--fixtures must be 'module:attribute', got {dotted!r}")
-    module = importlib.import_module(mod_name)
-    fixtures = getattr(module, attr)
-    if not isinstance(fixtures, dict):
-        raise SystemExit(f"{dotted} is not a dict of fixtures")
-    return fixtures
+def _summarise(infos: List[AnnotationInfo]) -> str:
+    counts = {k: sum(1 for i in infos if i.kind == k) for k in KINDS}
+    parts = [f"{n} @{k}" for k, n in counts.items() if n]
+    return ", ".join(parts) if parts else "none"
 
 
-# --------------------------------------------------------------------------- #
-# Subcommand: kinds -- the menu of annotations a user can choose to apply
-# --------------------------------------------------------------------------- #
+def _choose(input_fn: Callable[[str], str], output_fn: Callable[[str], None]) -> Optional[str]:
+    """Show the two-option menu and return 'inspect', 'stubs', or None to quit."""
+    output_fn("")
+    output_fn("Choose an action:")
+    output_fn("  1) Inspect @functional annotations   (accept/decline each -> inspection.yaml)")
+    output_fn("  2) Generate unit-test stubs for all annotations   (-> test_stubs/)")
+    while True:
+        try:
+            choice = input_fn("> ").strip().lower()
+        except EOFError:
+            return None
+        if choice in ("1", "inspect", "i"):
+            return "inspect"
+        if choice in ("2", "stubs", "s"):
+            return "stubs"
+        if choice in ("q", "quit", "", "exit"):
+            return None
+        output_fn("  please enter 1 or 2 (or q to quit)")
 
-def _cmd_kinds() -> int:
-    lines = ["rse_code_annotations -- annotation kinds you can apply:", ""]
-    for kind in KINDS:
-        lines.append(f"  @{kind}")
-        lines.append(f"      {KIND_HELP[kind]}")
-        lines.append("")
-    lines.append("Import them from the installed library and decorate your functions:")
-    lines.append("    from rse_annotations import functional, mapping, data_input, data_output")
-    lines.append("")
-    lines.append("Then inventory them with:   python -m rse_annotations.cli list <your-module> --path <src>")
-    lines.append("Or run the full checks with: python -m rse_annotations.cli run  <your-module> --path <src>")
-    print("\n".join(lines))
+
+def _do_inspect(infos, root: Path, input_fn, output_fn) -> int:
+    out_path = root / "inspection.yaml"
+    run_inspection(infos, out_path, input_fn=input_fn, output_fn=output_fn)
     return 0
 
 
-# --------------------------------------------------------------------------- #
-# Subcommand: list -- investigate a target for EXISTING annotations
-# --------------------------------------------------------------------------- #
-
-def _cmd_list(targets: List[str], paths: Optional[List[str]]) -> int:
-    _prepare_sys_path(paths)
-    infos = discover_many(targets)
-    if not infos:
-        print(f"No existing annotations found in: {', '.join(targets)}")
-        print("(Import rse_annotations and decorate functions; see `python -m rse_annotations.cli kinds`.)")
+def _do_stubs(infos, root: Path, output_fn) -> int:
+    out_dir = root / "test_stubs"
+    files = generate_stub_files(infos, out_dir)
+    if not files:
+        output_fn("No annotations found; nothing to scaffold.")
         return 0
-
-    print(f"Existing annotations in {', '.join(targets)} -- {len(infos)} found:\n")
-    for kind in KINDS:
-        of_kind = [i for i in infos if i.kind == kind]
-        if not of_kind:
-            continue
-        print(f"@{kind}  ({len(of_kind)})")
-        for info in of_kind:
-            print(f"  - {info.qualname:<28} {info.location}")
-        print()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    written = 0
+    for sf in files:
+        sf.path.write_text(sf.content, encoding="utf-8")
+        output_fn(f"  wrote {sf.path}  ({sf.stub_count} annotation(s) from {sf.source_module})")
+        written += sf.stub_count
+    output_fn("")
+    output_fn(f"Generated {written} stub(s) across {len(files)} file(s) in {out_dir}")
+    output_fn("Every test is a SKIPPED scaffold -- fill in the TODOs to make them run.")
     return 0
 
 
-# --------------------------------------------------------------------------- #
-# Subcommand: run -- full checks
-# --------------------------------------------------------------------------- #
-
-def _cmd_run(args: argparse.Namespace) -> int:
-    _prepare_sys_path(args.path)
-    fixtures = _load_fixtures(args.fixtures)
-    runner = Runner(
-        args.target,
-        fixtures=fixtures,
-        generate_stubs=not args.no_stubs,
-        probe=not args.no_probe,
-        effort=args.effort,
-        infer_formulas=not args.no_formulas,
+def main(
+    argv: Optional[list] = None,
+    *,
+    input_fn: Callable[[str], str] = input,
+    output_fn: Callable[[str], None] = print,
+) -> int:
+    parser = argparse.ArgumentParser(
+        prog="python -m rse_annotations.cli",
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    report = runner.run()
-    if args.json:
-        print(render_json(report))
-    else:
-        print(render_text(report, show_snippets=not args.no_snippets))
-    return 0 if report.ok else 1
-
-
-def main(argv: Optional[list] = None) -> int:
-    parser = argparse.ArgumentParser(prog="python -m rse_annotations.cli", description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
-    sub = parser.add_subparsers(dest="command", required=True)
-
-    sub.add_parser("kinds", help="list the annotation kinds you can apply")
-
-    lst = sub.add_parser("list", help="inventory existing annotations in target(s)")
-    lst.add_argument("target", nargs="+",
-                     help="one or more importable dotted paths, e.g. compute_icr")
-    lst.add_argument("--path", action="append", metavar="DIR",
-                     help="extra source root(s) to add to sys.path (repeatable)")
-
-    run = sub.add_parser("run", help="run checks against target package(s)/module(s)")
-    run.add_argument("target", nargs="+",
-                     help="one or more importable dotted paths, e.g. compute_icr")
-    run.add_argument("--path", action="append", metavar="DIR",
-                     help="extra source root(s) to add to sys.path (repeatable)")
-    run.add_argument("--json", action="store_true", help="emit JSON instead of text")
-    run.add_argument("--no-stubs", action="store_true",
-                     help="do not call Fable; snippet-only functional review")
-    run.add_argument("--no-probe", action="store_true",
-                     help="skip the Fable probe call (assume available if key present)")
-    run.add_argument("--effort", default="medium",
-                     choices=["low", "medium", "high", "xhigh", "max"],
-                     help="Fable reasoning effort for stub generation")
-    run.add_argument("--fixtures", default=None,
-                     help="module:attribute pointing at a dict of I/O fixtures")
-    run.add_argument("--no-snippets", action="store_true",
-                     help="omit full source snippets from text output")
-    run.add_argument("--no-formulas", action="store_true",
-                     help="skip formula inference for @functional code")
-
+    parser.add_argument("path", nargs="?", default=".",
+                        help="directory of code to scan (default: current directory)")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--inspect", action="store_true",
+                      help="inspect @functional annotations (skip the menu)")
+    mode.add_argument("--stubs", action="store_true",
+                      help="generate unit-test stubs (skip the menu)")
     args = parser.parse_args(argv)
 
-    if args.command == "kinds":
-        return _cmd_kinds()
-    if args.command == "list":
-        return _cmd_list(args.target, args.path)
-    if args.command == "run":
-        return _cmd_run(args)
-    return 2
+    root = Path(args.path).resolve()
+    if not root.is_dir():
+        output_fn(f"error: {root} is not a directory")
+        return 2
+
+    infos = discover_path(root)
+    output_fn(f"Scanned {root}")
+    output_fn(f"Found {len(infos)} annotation(s): {_summarise(infos)}")
+    if not infos:
+        output_fn("Nothing to do. Decorate functions with the four annotations first:")
+        output_fn("    from rse_annotations import functional, mapping, data_input, data_output")
+        return 0
+
+    if args.inspect:
+        action = "inspect"
+    elif args.stubs:
+        action = "stubs"
+    else:
+        action = _choose(input_fn, output_fn)
+
+    if action == "inspect":
+        return _do_inspect(infos, root, input_fn, output_fn)
+    if action == "stubs":
+        return _do_stubs(infos, root, output_fn)
+    output_fn("No action chosen.")
+    return 0
 
 
 if __name__ == "__main__":

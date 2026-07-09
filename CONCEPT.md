@@ -1,10 +1,9 @@
 # rse_code_annotations — Concept
 
 A lightweight Python framework that uses **code annotations (decorators)** to mark the
-*role* each function plays in a data-processing pipeline, and a **runner** that verifies
-those roles are used correctly, tests them, and — for the purely mathematical parts —
-helps the author reason about correctness (optionally generating unit-test stubs with
-Anthropic's **Claude Fable 5** model).
+*role* each function plays in a data-processing pipeline, plus a small **interactive
+tool** that helps the author review the purely mathematical parts and scaffold tests
+for every annotated function. No LLM, no network.
 
 The motivating problem: LLM-generated code is easy to produce but hard to audit. If the
 author labels *what each function is supposed to be* (a pure function, a format mapping,
@@ -21,7 +20,7 @@ they are safe to leave in production code.
 
 | Annotation      | Marks code that…                                              | Runner focus |
 | --------------- | ------------------------------------------------------------- | ------------ |
-| `@functional`   | is a **mathematical function** — deterministic, pure, output depends only on inputs (no I/O, no globals). | Extract the source as a **reviewable snippet**; optionally generate unit-test stubs for correctness review. |
+| `@functional`   | is a **mathematical function** — deterministic, pure, output depends only on inputs (no I/O, no globals). | Extract the source as a **reviewable snippet**; **infer and show its formula**; generate a pattern-based unit-test stub. |
 | `@mapping`      | **maps/transforms** one data format or object into another.   | Must have a docstring documenting its fields; is exercised by unit tests. |
 | `@data_input`   | is a **boundary where data enters** the system (reads a file / source). | Must actually **read** a file successfully; must document its fields. |
 | `@data_output`  | is a **boundary where data leaves** the system (writes a file / sink). | Must actually **write** a file successfully; must document its fields. |
@@ -55,12 +54,13 @@ appended to a process-global `REGISTRY`.
 
 ---
 
-## 3. The runner
+## 3. The checking runner
 
-`python -m rse_annotations.cli run <package>` (or `Runner(...).run()`) does the following,
-per annotated function:
+`Runner(...).run()` (the library's programmatic checker) does the following, per
+annotated function:
 
-1. **Discovery** — import the target package/module; collect everything in `REGISTRY`.
+1. **Discovery** — import the target (by dotted name, or by walking a directory with
+   `discover_path`); collect everything in `REGISTRY`.
 2. **Placement checks** (AST) — verify the annotation is applied where it makes sense:
    - decorator is the outermost one and applied to a `def`/`async def`, not a class;
    - `@functional` bodies contain **no** `open(`, no `print(`, no obvious I/O calls, and no
@@ -76,40 +76,40 @@ per annotated function:
      fixture and confirm a file was actually read / written (observed via a traced `open`).
 5. **`@functional` correctness aid** — instead of asserting maths (undecidable in general),
    the runner **emits a list of code snippets** — one per `@functional` — that the author
-   can iterate over to review mathematical correctness by eye, and offers to **generate
-   unit-test stubs** for each snippet *if Fable is available* (see §4).
+   can iterate over to review mathematical correctness by eye, and **infers each one's
+   formula** for inspection (see §4 for the tool that drives this interactively).
 
 The runner returns a structured `Report` (JSON-serialisable) and a human-readable summary
 with PASS / WARN / FAIL per function.
 
 ---
 
-## 4. Fable-assisted unit-test stubs (optional)
+## 4. The interactive tool (two options)
 
-For `@functional` snippets the runner can call **Claude Fable 5** (`claude-fable-5`) via the
-official `anthropic` Python SDK to draft `pytest` stubs the author then reviews and fills in.
+`python -m rse_annotations.cli <path>` is the front door. It walks `<path>` (default:
+the current directory), imports every `*.py` under it so decorators register, collects
+the annotations, and offers a **two-option menu** — no LLM, no network:
 
-"**if fable is still available**" is checked at runtime, in this order — the feature is fully
-optional and the runner degrades gracefully to *snippet-only* mode if any check fails:
+**Option 1 — Inspect `@functional` annotations.** Each `@functional` snippet is shown
+one at a time with its source and its **inferred formula** (§ formula inference in the
+README). The author accepts or declines each (`[y]es / [n]o / [s]kip`); verdicts are
+written to `<path>/inspection.yaml` and re-loaded on the next run. This is aimed at
+reviewing *generated* code: seeing the rendered formula next to the source makes it
+easy to judge whether the maths matches intent.
 
-1. the `anthropic` package is importable;
-2. an API key is present (`ANTHROPIC_API_KEY`);
-3. a cheap probe call to the model succeeds (or `--no-probe` to skip).
+**Option 2 — Generate unit-test stubs.** For every annotation the tool emits a `pytest`
+stub built from the function's **kind pattern** — purely mechanical, no model:
 
-Fable specifics honoured by the integration (`rse_annotations/fable.py`):
+- `@functional` → a determinism check (same inputs → same output) plus an
+  expected-value scaffold, with the inferred formula included as a comment;
+- `@mapping` → a shape-transform check;
+- `@data_input` / `@data_output` → a `tmp_path` read / write check.
 
-- **thinking is always on** — we omit the `thinking` parameter;
-- depth via `output_config={"effort": "medium"}`;
-- **refusal handling + server-side fallback on by default** — we pass
-  `betas=["server-side-fallback-2026-06-01"]` and
-  `fallbacks=[{"model": "claude-opus-4-8"}]`, and check `stop_reason == "refusal"`
-  before reading content;
-- **no assistant prefill** — we use structured `output_config.format` for the stub list;
-- requires **30-day data retention** (won't run under ZDR).
+Every stub body calls `pytest.skip("TODO: ...")`, so a generated test never silently
+passes until the author fills it in — it cannot bless wrong maths. Files are written to
+`<path>/test_stubs/test_<module>.py`.
 
-Generated stubs are *scaffolding only* — they contain `# TODO: assert ...` placeholders and
-property-based test ideas, never fabricated "known good" outputs, so they can't silently
-bless wrong maths.
+`--inspect` / `--stubs` jump straight to one option and skip the menu.
 
 ---
 
@@ -121,13 +121,18 @@ rse_code_annotations/
 ├── README.md                   # quickstart
 ├── pyproject.toml
 ├── rse_annotations/
-│   ├── __init__.py             # re-exports the four decorators + Runner
+│   ├── __init__.py             # re-exports the four decorators + Runner + helpers
 │   ├── annotations.py          # @functional / @mapping / @data_input / @data_output
-│   ├── registry.py             # AnnotationInfo, REGISTRY, discovery helpers
+│   ├── registry.py             # AnnotationInfo, REGISTRY, KINDS/KIND_HELP
+│   ├── discovery.py            # import by dotted name or by walking a path
 │   ├── checks.py               # AST placement + docstring + I/O-success checks
-│   ├── fable.py                # Claude Fable 5 stub generation (optional)
+│   ├── snippets.py             # reviewable source snippets (no deps)
+│   ├── formula.py              # AST / SymPy / latexify formula inference
+│   ├── stubs.py                # pattern-based pytest stub generation (no LLM)
+│   ├── inspection.py           # interactive @functional review + inspection.yaml
+│   ├── verify.py               # differential-testing harness
 │   ├── runner.py               # orchestration + Report
-│   └── cli.py                  # `python -m rse_annotations.cli run <pkg>`
+│   └── cli.py                  # `python -m rse_annotations.cli <path>` (two-option menu)
 ├── examples/
 │   └── sample_pipeline.py      # one function of each kind, correct + incorrect
 └── tests/

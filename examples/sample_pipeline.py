@@ -1,10 +1,12 @@
 """Example pipeline exercising all four annotations.
 
-Run the checker against it::
+Point the interactive tool at this directory::
 
-    python -m rse_annotations.cli run examples.sample_pipeline
+    python -m rse_annotations.cli examples
 
-It intentionally includes one *good* and one *problematic* case so the report shows
+or check it programmatically with ``Runner("examples.sample_pipeline").run()``.
+
+It intentionally includes one *good* and one *problematic* case so the checks show
 both PASS and FAIL/WARN outcomes.
 """
 

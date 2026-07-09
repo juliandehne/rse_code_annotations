@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "rse-code-annotations"
 version = "0.1.0"
-description = "Role annotations for generated code, with a checking runner and optional Fable-assisted test stubs."
+description = "Role annotations for generated code, with a checking runner, formula inference, and pattern-based test-stub generation."
 readme = "README.md"
 requires-python = ">=3.9"
 authors = [{ name = "Julian Dehne" }]
@@ -13,9 +13,8 @@ license = { text = "MIT" }
 dependencies = []
 
 [project.optional-dependencies]
-fable = ["anthropic>=0.40"]
 formula = ["sympy>=1.12", "latexify-py>=0.4"]
-dev = ["pytest>=7", "anthropic>=0.40", "sympy>=1.12", "latexify-py>=0.4"]
+dev = ["pytest>=7", "sympy>=1.12", "latexify-py>=0.4"]
 
 [project.scripts]
 rse-annotations = "rse_annotations.cli:main"

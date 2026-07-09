@@ -16,11 +16,20 @@ correct whether the target was imported for the first time just now or long ago.
 from __future__ import annotations
 
 import importlib
+import importlib.util
+import os
 import pkgutil
+import sys
+from pathlib import Path
 from types import ModuleType
 from typing import Iterable, List
 
 from .registry import REGISTRY, AnnotationInfo
+
+#: Directories never walked when discovering annotations under a path root.
+_SKIP_DIRS = {"__pycache__", ".git", ".hg", ".svn", ".venv", "venv", "env",
+              "node_modules", ".mypy_cache", ".pytest_cache", "test_stubs",
+              ".ipynb_checkpoints", "build", "dist"}
 
 
 def _import_all_submodules(module: ModuleType) -> None:
@@ -93,3 +102,95 @@ def discover_many(targets: Iterable[str], *, clear: bool = True) -> List[Annotat
         module = importlib.import_module(target)
         _import_all_submodules(module)
     return _select_for_targets(targets)
+
+
+# --------------------------------------------------------------------------- #
+# Path-based discovery (no dotted names required)
+# --------------------------------------------------------------------------- #
+
+def _iter_python_files(root: Path) -> Iterable[Path]:
+    """Yield ``*.py`` files under ``root``, skipping vendored / cache dirs."""
+    for dirpath, dirnames, filenames in os.walk(root):
+        # prune skip dirs and hidden dirs in place so os.walk doesn't descend
+        dirnames[:] = [d for d in dirnames
+                       if d not in _SKIP_DIRS and not d.startswith(".")]
+        for name in filenames:
+            if name.endswith(".py"):
+                yield Path(dirpath) / name
+
+
+def _module_name_for(path: Path, root: Path) -> str:
+    """Derive a dotted module name for ``path`` relative to ``root``."""
+    rel = path.relative_to(root).with_suffix("")
+    parts = [p for p in rel.parts if p]
+    if parts and parts[-1] == "__init__":
+        parts = parts[:-1]
+    return ".".join(parts) or path.stem
+
+
+def _import_file(path: Path, module_name: str) -> None:
+    """Import a single file by location so its decorators run (idempotent-ish)."""
+    if module_name in sys.modules:
+        return  # already imported under this name; decorators already ran
+    spec = importlib.util.spec_from_file_location(module_name, str(path))
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot build import spec for {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        sys.modules.pop(module_name, None)
+        raise
+
+
+def _under_path(file: str, root: Path) -> bool:
+    try:
+        Path(file).resolve().relative_to(root)
+        return True
+    except (ValueError, OSError):
+        return False
+
+
+def discover_path(root) -> List[AnnotationInfo]:
+    """Discover annotations by walking a directory (no dotted import needed).
+
+    Every ``*.py`` file under ``root`` is imported so its decorators register, then
+    the registry is filtered down to annotations whose source file lives under
+    ``root``. ``root`` (and its parent) are placed on ``sys.path`` first so intra-
+    project imports resolve. Files that fail to import are reported and skipped.
+
+    Args:
+        root: Directory to scan (``str`` or ``Path``). Defaults elsewhere to cwd.
+
+    Returns:
+        The list of :class:`AnnotationInfo` defined anywhere under ``root``.
+    """
+    root = Path(root).resolve()
+    if not root.is_dir():
+        raise NotADirectoryError(f"{root} is not a directory")
+
+    for extra in (str(root), str(root.parent)):
+        if extra not in sys.path:
+            sys.path.insert(0, extra)
+
+    for path in _iter_python_files(root):
+        module_name = _module_name_for(path, root)
+        try:
+            _import_file(path, module_name)
+        except KeyboardInterrupt:
+            raise
+        except BaseException as exc:  # noqa: BLE001 - incl. SystemExit from script-style modules
+            print(f"[discovery] warning: could not import {path}: {exc!r}")
+
+    selected: List[AnnotationInfo] = []
+    seen: set = set()
+    for info in REGISTRY.all():
+        if info.file in (None, "<unknown>") or not _under_path(info.file, root):
+            continue
+        key = (info.module, info.qualname, info.lineno)
+        if key in seen:
+            continue
+        seen.add(key)
+        selected.append(info)
+    return selected

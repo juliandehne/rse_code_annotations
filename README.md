@@ -1,7 +1,8 @@
 # rse_code_annotations
 
-Role **annotations** for (generated) Python code, plus a **runner** that checks the
-annotations hold and helps you review the maths.
+Role **annotations** for (generated) Python code, plus a small interactive **tool**
+that helps you review the annotated code and scaffold tests for it. No LLM, no
+network.
 
 See [`CONCEPT.md`](CONCEPT.md) for the full design rationale.
 
@@ -9,15 +10,15 @@ See [`CONCEPT.md`](CONCEPT.md) for the full design rationale.
 
 ```bash
 pip install -e .            # core, no dependencies — the annotations work immediately
-pip install -e ".[formula]" # + SymPy/latexify for formula inference
-pip install -e ".[fable]"   # + anthropic SDK for Fable test-stub generation
+pip install -e ".[formula]" # + SymPy/latexify for richer formula inference
 ```
 
 The base install has **no dependencies**: after `pip install` you can import and
-apply the four annotations right away. The optional extras only add the heavier
-`run`-time analysis (formula inference, Fable).
+apply the four annotations right away. The optional `formula` extra only adds the
+heavier symbolic backends for formula inference (the built-in AST backend needs
+nothing).
 
-The runner is invoked with `python -m rse_annotations.cli` — this needs nothing on
+The tool is invoked with `python -m rse_annotations.cli` — this needs nothing on
 your PATH; the interpreter finds the installed package via `site-packages`. (A
 `rse-annotations` console script is also installed for convenience, but using it as
 a bare command requires Python's `Scripts` dir on PATH, so the docs use `python -m`.)
@@ -39,76 +40,64 @@ def load_csv(path):
         ...
 ```
 
-| Annotation     | Means                                          | Runner checks |
-| -------------- | ---------------------------------------------- | ------------- |
-| `@functional`  | pure mathematical function                     | purity (no I/O); emits a review snippet + optional test stub |
-| `@mapping`     | transforms one format/object into another      | has docstring; documents declared fields |
-| `@data_input`  | boundary where data enters (reads a file)      | actually reads a file; documents fields |
-| `@data_output` | boundary where data leaves (writes a file)     | actually writes a file; documents fields |
+| Annotation     | Means                                          | Tool support |
+| -------------- | ---------------------------------------------- | ------------ |
+| `@functional`  | pure mathematical function                     | inferred formula shown for inspection; determinism + expected-value test stubs |
+| `@mapping`     | transforms one format/object into another      | shape-transform test stub |
+| `@data_input`  | boundary where data enters (reads a file)      | tmp-file read test stub |
+| `@data_output` | boundary where data leaves (writes a file)     | tmp-file write test stub |
 
-## The runner
+## The tool
 
-The runner has three subcommands. It works on **any** target: name an importable
-module and (if it lives outside the cwd) point `--path` at its source root. The
-target is never installed — it is just added to `sys.path` and imported for
-inspection.
-
-```bash
-# 1. What can I annotate?  Lists the kinds so you can choose one to apply.
-python -m rse_annotations.cli kinds
-
-# 2. What is already annotated?  Inventories EXISTING annotations in a target.
-python -m rse_annotations.cli list mypkg --path src
-
-# 3. Do the annotations hold?  Full checks + formula inference + Fable.
-python -m rse_annotations.cli run mypkg --path src --fixtures mypkg.fixtures:FIXTURES
-```
-
-`kinds` and `list` are the menu the newcomer starts with: `kinds` prints the four
-roles and their one-line guidance; `list` scans a target and reports which
-functions already carry an annotation, grouped by kind. `run` is the full checker.
+The tool is an **interactive, two-option menu**. Point it at a directory (defaults
+to the current directory); it walks every `*.py` file underneath, imports each so
+its decorators register, and collects the annotations found there. No LLM, no
+network — the two options are:
 
 ```bash
-# text report
-python -m rse_annotations.cli run examples.sample_pipeline --fixtures examples.fixtures:FIXTURES
-
-# JSON, and skip Fable entirely
-python -m rse_annotations.cli run examples.sample_pipeline --no-stubs --json
+python -m rse_annotations.cli path/to/src
 ```
 
-The `run` exit code is `0` when no check fails, `1` otherwise — usable in CI.
+```
+Found 6 annotation(s) under <root>
+  functional: 3   mapping: 1   data_input: 1   data_output: 1
 
-### Fixtures (for the I/O-success check)
+  1) Inspect @functional annotations
+  2) Generate unit-test stubs
+  q) Quit
+Choose [1/2/q]:
+```
 
-Boundary functions (`@data_input` / `@data_output`) are *invoked* in a sandbox to
-confirm they really read/write. Supply a `dict` mapping function name → a
-`fixture(tmpdir, tracer) -> (args, kwargs)` callable (see `examples/fixtures.py`).
-Without a fixture the I/O check is reported as `WARN` (cannot invoke safely).
+**Option 1 — Inspect `@functional` annotations.** Each `@functional` snippet is
+shown one at a time with its source and the **inferred formula**, then you accept
+or decline it (`[y]es / [n]o / [s]kip`). This is meant for reviewing *generated*
+code: the formula makes it easy to see whether the maths matches intent. Your
+verdicts are written to `<root>/inspection.yaml` (and re-loaded on the next run so
+prior decisions are shown).
 
-## Fable-assisted `@functional` review
+**Option 2 — Generate unit-test stubs.** For every annotation, a `pytest` stub is
+generated from the per-kind pattern — `@functional` gets a determinism check plus an
+expected-value scaffold (with the inferred formula as a comment); `@mapping` a
+shape-transform check; `@data_input`/`@data_output` a `tmp_path` read/write check.
+Every stub body calls `pytest.skip(...)`, so nothing silently passes until you fill
+it in. Files are written to `<root>/test_stubs/test_<module>.py`.
 
-For every `@functional`, the runner prints the source as a **review snippet**. If
-**Claude Fable 5** is available (the `anthropic` SDK is installed, `ANTHROPIC_API_KEY`
-is set, and a probe call succeeds), it also drafts a `pytest` **stub** per snippet —
-scaffolding with `# TODO` asserts and property-test ideas, never fabricated expected
-values. If Fable is unavailable the runner degrades to snippet-only mode and says why.
+You can skip the menu with `--inspect` or `--stubs`:
 
-Flags: `--no-stubs` (never call Fable), `--no-probe` (assume available if a key is
-set), `--effort {low,medium,high,xhigh,max}`.
-
-The integration uses server-side refusal fallback to `claude-opus-4-8` by default and
-requires 30-day data retention (it will not run under zero-data-retention).
+```bash
+python -m rse_annotations.cli src --inspect   # straight to Option 1
+python -m rse_annotations.cli src --stubs      # straight to Option 2
+```
 
 ## Formula inference for `@functional`
 
-For every `@functional` the runner also **infers the mathematical formula from the code
-and prints it for inspection** (never a correctness proof). Three backends run
-best-effort: AST rendering (no deps), SymPy symbolic execution (`pip install sympy`),
-and latexify (`pip install latexify-py`). Install both with `pip install -e ".[formula]"`.
-See [`FORMULA_INFERENCE.md`](FORMULA_INFERENCE.md) for the landscape (why symbolic
-tools recover closed forms for scalar arithmetic, why Krippendorff's α needs a reference
-implementation instead, and where formal verifiers like Dafny/Why3/Coq fit). Disable
-with `--no-formulas`.
+Option 1 **infers the mathematical formula from the code and shows it for
+inspection** (never a correctness proof). Three backends run best-effort: AST
+rendering (no deps), SymPy symbolic execution (`pip install sympy`), and latexify
+(`pip install latexify-py`). Install both with `pip install -e ".[formula]"`. See
+[`FORMULA_INFERENCE.md`](FORMULA_INFERENCE.md) for the landscape (why symbolic tools
+recover closed forms for scalar arithmetic, why Krippendorff's α needs a reference
+implementation instead, and where formal verifiers like Dafny/Why3/Coq fit).
 
 ## Differential verification
 
@@ -133,12 +122,12 @@ the external `krippendorff` library — but the harness is domain-agnostic.
 
 Krippendorff's α is **one worked example**, not part of the framework. It shows the
 honest pipeline for a formula buried inside a third-party library call: isolate the
-maths as a pure `@functional`, let `run` render its formula, and pin it with
+maths as a pure `@functional`, let the tool render its formula, and pin it with
 `differential_check` against the trusted library. See the `lni_study` testbed and
 [`FORMULA_INFERENCE.md`](FORMULA_INFERENCE.md) for the full write-up.
 
 ## Test
 
 ```bash
-pytest        # network-free; Fable calls are disabled in tests
+pytest        # network-free; no LLM
 ```

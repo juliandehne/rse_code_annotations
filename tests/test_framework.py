@@ -1,9 +1,10 @@
-"""Tests for the framework itself (no network / no Fable required)."""
+"""Tests for the framework itself (no network / no LLM required)."""
 
 from __future__ import annotations
 
 import os
 import sys
+import textwrap
 
 import pytest
 
@@ -17,11 +18,12 @@ from rse_annotations import (  # noqa: E402
     Runner,
     annotation_of,
     data_input,
+    data_output,
     functional,
     mapping,
 )
 from rse_annotations import checks  # noqa: E402
-from rse_annotations.fable import extract_snippet, fable_available  # noqa: E402
+from rse_annotations.snippets import extract_snippet  # noqa: E402
 
 
 def test_decorator_preserves_behaviour_and_metadata():
@@ -102,11 +104,7 @@ def test_extract_snippet_contains_source():
 def test_runner_end_to_end_on_example():
     from examples import fixtures as fx
 
-    runner = Runner(
-        "examples.sample_pipeline",
-        fixtures=fx.FIXTURES,
-        generate_stubs=False,  # never touch the network in tests
-    )
+    runner = Runner("examples.sample_pipeline", fixtures=fx.FIXTURES)
     report = runner.run()
 
     by_name = {fr.name: fr for fr in report.functions}
@@ -119,8 +117,6 @@ def test_runner_end_to_end_on_example():
     # snippets emitted for every @functional
     functional_names = {s.name for s in report.snippets}
     assert {"normalize", "mean", "impure_sum"} <= functional_names
-    # stubs disabled -> fable reported unavailable/disabled
-    assert report.fable is not None and not report.fable.available
 
 
 def test_formula_inference_ast_and_sympy():
@@ -212,50 +208,173 @@ def test_differential_check_skips_when_reference_rejects():
 def test_runner_accepts_multiple_targets():
     from examples import fixtures as fx
 
-    report = Runner(
-        ["examples.sample_pipeline"],  # list form
-        fixtures=fx.FIXTURES,
-        generate_stubs=False,
-    ).run()
+    report = Runner(["examples.sample_pipeline"], fixtures=fx.FIXTURES).run()
     assert {fr.name for fr in report.functions}  # non-empty
 
 
-def test_fable_available_without_key(monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    status = fable_available(probe=False)
-    # Either SDK missing or key missing -> unavailable, with a reason.
-    assert not status.available
-    assert status.reason
+# --------------------------------------------------------------------------- #
+# Path-based discovery
+# --------------------------------------------------------------------------- #
+
+_SAMPLE_MODULE = '''
+from rse_annotations import functional, mapping, data_input, data_output
 
 
-def test_cli_kinds_lists_every_kind(capsys):
+@functional
+def area(w, h):
+    "rectangle area. :param w: :param h: :returns:"
+    return w * h
+
+
+@mapping(fields={"raw": "raw rows", "clean": "cleaned rows"})
+def tidy(raw):
+    "tidy raw into clean. :param raw: :returns clean:"
+    return [r for r in raw if r]
+
+
+@data_input(fields={"path": "file to read", "rows": "records"})
+def load(path):
+    "read rows. :param path: :returns rows:"
+    with open(path) as fh:
+        return fh.read()
+
+
+@data_output(fields={"rows": "records to write", "path": "target file"})
+def store(rows, path):
+    "write rows. :param rows: :param path:"
+    with open(path, "w") as fh:
+        fh.write(str(rows))
+'''
+
+
+def _write_sample(tmp_path, stem):
+    src = tmp_path / f"{stem}.py"
+    src.write_text(textwrap.dedent(_SAMPLE_MODULE), encoding="utf-8")
+    return src
+
+
+def test_discover_path_finds_all_kinds(tmp_path):
+    from rse_annotations.discovery import discover_path
+
+    _write_sample(tmp_path, "pkg_discover")
+    infos = discover_path(tmp_path)
+    by_kind = {i.kind for i in infos}
+    assert {"functional", "mapping", "data_input", "data_output"} <= by_kind
+    names = {i.name for i in infos}
+    assert {"area", "tidy", "load", "store"} <= names
+
+
+# --------------------------------------------------------------------------- #
+# Pattern-based stub generation
+# --------------------------------------------------------------------------- #
+
+def test_generate_stub_files_covers_every_kind(tmp_path):
+    from rse_annotations.discovery import discover_path
+    from rse_annotations.stubs import generate_stub_files
+
+    _write_sample(tmp_path, "pkg_stub")
+    infos = discover_path(tmp_path)
+    files = generate_stub_files(infos, tmp_path / "test_stubs")
+    assert files
+    blob = "\n".join(sf.content for sf in files)
+    # one test per annotation, each a skipped scaffold
+    assert "def test_area_is_deterministic" in blob
+    assert "def test_tidy_transforms_shape" in blob
+    assert "def test_load_reads_source(tmp_path)" in blob
+    assert "def test_store_writes_sink(tmp_path)" in blob
+    assert "pytest.skip" in blob
+    assert "import pytest" in blob
+
+
+# --------------------------------------------------------------------------- #
+# Interactive inspection
+# --------------------------------------------------------------------------- #
+
+def test_run_inspection_records_and_roundtrips(tmp_path):
+    from rse_annotations.discovery import discover_path
+    from rse_annotations.inspection import load_yaml, run_inspection
+
+    _write_sample(tmp_path, "pkg_inspect")
+    infos = discover_path(tmp_path)
+    answers = iter(["y"])  # single @functional (area) -> accept
+
+    out = tmp_path / "inspection.yaml"
+    verdicts = run_inspection(
+        infos, out,
+        input_fn=lambda _prompt: next(answers),
+        output_fn=lambda _msg: None,
+    )
+    assert [v.verdict for v in verdicts] == ["accepted"]
+    assert out.exists()
+    reloaded = load_yaml(out)
+    assert reloaded[0].function == "area"
+    assert reloaded[0].verdict == "accepted"
+
+
+def test_run_inspection_default_on_empty_answer(tmp_path):
+    from rse_annotations.discovery import discover_path
+    from rse_annotations.inspection import run_inspection
+
+    _write_sample(tmp_path, "pkg_inspect_default")
+    infos = discover_path(tmp_path)
+    out = tmp_path / "inspection.yaml"
+    verdicts = run_inspection(
+        infos, out,
+        input_fn=lambda _prompt: "",       # accept the default -> pending
+        output_fn=lambda _msg: None,
+    )
+    assert verdicts[0].verdict == "pending"
+
+
+# --------------------------------------------------------------------------- #
+# CLI: the two-option tool
+# --------------------------------------------------------------------------- #
+
+def test_cli_stubs_mode_writes_files(tmp_path):
     from rse_annotations.cli import main
-    from rse_annotations.registry import KINDS
 
-    assert main(["kinds"]) == 0
-    out = capsys.readouterr().out
-    for kind in KINDS:
-        assert f"@{kind}" in out
-    # the import hint should point the user at the installed library
-    assert "from rse_annotations import" in out
+    _write_sample(tmp_path, "pkg_cli_stub")
+    msgs = []
+    rc = main([str(tmp_path), "--stubs"], output_fn=msgs.append)
+    assert rc == 0
+    stub_dir = tmp_path / "test_stubs"
+    assert stub_dir.is_dir()
+    assert list(stub_dir.glob("test_*.py"))
 
 
-def test_cli_list_inventories_existing_annotations(capsys):
+def test_cli_inspect_mode_writes_yaml(tmp_path):
     from rse_annotations.cli import main
 
-    assert main(["list", "examples.sample_pipeline"]) == 0
-    out = capsys.readouterr().out
-    assert "found" in out
-    # groups the discovered annotations by kind
-    assert "@functional" in out and "@data_input" in out
-    # names the actual annotated functions
-    assert "normalize" in out and "load_csv" in out
+    _write_sample(tmp_path, "pkg_cli_inspect")
+    answers = iter(["n"])
+    rc = main(
+        [str(tmp_path), "--inspect"],
+        input_fn=lambda _p: next(answers),
+        output_fn=lambda _m: None,
+    )
+    assert rc == 0
+    assert (tmp_path / "inspection.yaml").exists()
 
 
-def test_cli_list_reports_when_target_has_none(capsys):
+def test_cli_menu_dispatches_on_choice(tmp_path):
     from rse_annotations.cli import main
 
-    # a stdlib module with no rse annotations
-    assert main(["list", "json"]) == 0
-    out = capsys.readouterr().out
-    assert "No existing annotations found" in out
+    _write_sample(tmp_path, "pkg_cli_menu")
+    # first prompt is the menu ("2" -> stubs); no further input needed
+    answers = iter(["2"])
+    rc = main(
+        [str(tmp_path)],
+        input_fn=lambda _p: next(answers),
+        output_fn=lambda _m: None,
+    )
+    assert rc == 0
+    assert (tmp_path / "test_stubs").is_dir()
+
+
+def test_cli_reports_empty_directory(tmp_path):
+    from rse_annotations.cli import main
+
+    msgs = []
+    rc = main([str(tmp_path)], output_fn=msgs.append)
+    assert rc == 0
+    assert any("0 annotation" in m for m in msgs)

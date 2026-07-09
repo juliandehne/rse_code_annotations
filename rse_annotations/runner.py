@@ -1,7 +1,8 @@
 """The runner: discover annotated functions, check them, and report.
 
-Pulls together discovery, the checks, and the (optional) Fable-assisted
-``@functional`` review into a single :class:`Report`.
+Pulls together discovery, the checks, review snippets, and formula inference into
+a single :class:`Report`. This is the programmatic API; the interactive two-option
+CLI (inspect / stubs) lives in :mod:`rse_annotations.cli`.
 
 Fixtures for the I/O-success checks are supplied by the caller as a mapping from
 ``qualname`` to a ``fixture(tmpdir, tracer) -> (args, kwargs)`` callable. A boundary
@@ -18,9 +19,9 @@ from typing import Union
 
 from . import checks as _checks
 from .discovery import discover_many
-from .fable import FableStatus, Snippet, functional_review
 from .formula import FormulaResult, infer_formula, render_formula
 from .registry import AnnotationInfo
+from .snippets import Snippet, extract_snippet
 
 
 @dataclass
@@ -45,7 +46,6 @@ class Report:
     functions: List[FunctionReport] = field(default_factory=list)
     snippets: List[Snippet] = field(default_factory=list)
     formulas: List[FormulaResult] = field(default_factory=list)
-    fable: Optional[FableStatus] = None
 
     # ---- aggregate accessors ------------------------------------------- #
     @property
@@ -74,14 +74,11 @@ class Report:
                 for fr in self.functions
             ],
             "functional_review": {
-                "fable": asdict(self.fable) if self.fable else None,
                 "snippets": [
                     {
                         "name": s.name,
                         "location": s.location,
                         "signature": s.signature,
-                        "has_stub": s.test_stub is not None,
-                        "stub_error": s.stub_error,
                     }
                     for s in self.snippets
                 ],
@@ -102,23 +99,17 @@ class Report:
 
 
 class Runner:
-    """Orchestrates discovery -> checks -> functional review -> report."""
+    """Orchestrates discovery -> checks -> snippets/formulas -> report."""
 
     def __init__(
         self,
         target: Union[str, List[str]],
         *,
         fixtures: Optional[Dict[str, Callable]] = None,
-        generate_stubs: bool = True,
-        probe: bool = True,
-        effort: str = "medium",
         infer_formulas: bool = True,
     ) -> None:
         self.targets = [target] if isinstance(target, str) else list(target)
         self.fixtures = fixtures or {}
-        self.generate_stubs = generate_stubs
-        self.probe = probe
-        self.effort = effort
         self.infer_formulas = infer_formulas
 
     def run(self) -> Report:
@@ -138,14 +129,7 @@ class Runner:
                 )
             )
 
-        snippets, status = functional_review(
-            infos,
-            generate=self.generate_stubs,
-            probe=self.probe,
-            effort=self.effort,
-        )
-        report.snippets = snippets
-        report.fable = status
+        report.snippets = [extract_snippet(i) for i in infos if i.kind == "functional"]
 
         if self.infer_formulas:
             report.formulas = [
@@ -177,9 +161,6 @@ def render_text(report: Report, *, show_snippets: bool = True) -> str:
     if report.snippets:
         lines.append("=" * 70)
         lines.append("@functional review -- inspect these snippets for mathematical correctness:")
-        if report.fable:
-            state = "available" if report.fable.available else "unavailable"
-            lines.append(f"  Fable stub generation: {state} ({report.fable.reason})")
         lines.append("")
 
     # Inferred formulas (formal-methods / symbolic inspection)
@@ -197,12 +178,6 @@ def render_text(report: Report, *, show_snippets: bool = True) -> str:
             if show_snippets:
                 for src_line in s.source.splitlines():
                     lines.append(f"    {src_line}")
-            if s.test_stub:
-                lines.append("  Generated pytest stub:")
-                for stub_line in s.test_stub.splitlines():
-                    lines.append(f"    | {stub_line}")
-            elif s.stub_error:
-                lines.append(f"  (stub not generated: {s.stub_error})")
             lines.append("")
 
     return "\n".join(lines)

@@ -13,7 +13,7 @@ So the honest split is:
 | Goal | Tool class | Can it infer the formula? |
 | ---- | ---------- | ------------------------- |
 | **Show what the code computes** (for review) | Symbolic execution (SymPy), AST→LaTeX (latexify, our AST backend) | **Yes**, for pure scalar arithmetic |
-| **Describe non-arithmetic code** (loops, matrices, library calls) | LLM inference (Claude Fable 5) | Approximately — it's an inference, not a proof |
+| **Pin non-arithmetic code** (loops, matrices, library calls) | Differential testing against a trusted reference | Not the formula — but it verifies the code agrees with a known-good implementation |
 | **Prove the code equals a formula** | Formal verifiers (Dafny, Why3, Coq/Isabelle, KeY, CBMC) | **No** — *you* write the spec; they check code against it |
 
 ## What this framework implements (`rse_annotations/formula.py`)
@@ -35,9 +35,9 @@ prints whatever each produces so a human can compare them:
 3. **latexify** (`pip install latexify-py`). A dedicated AST→LaTeX converter for Python
    functions — publication-quality output, complements backend 1.
 
-A fourth, optional backend — **Claude Fable 5** — states the formula in words/LaTeX for
-code the symbolic tools cannot handle (see the Krippendorff case below). It is clearly
-labelled as an *inference*, never a proof.
+For code the symbolic backends cannot handle (loops over matrices, library calls — see
+the Krippendorff case below), formula inference simply does not apply; the tactic there
+is differential testing against a trusted reference, not formula rendering.
 
 ### Worked example (from the runner)
 
@@ -92,5 +92,5 @@ Tools like **Dafny**, **Why3**, **Coq/Isabelle**, **KeY** and **CBMC** are
 property such as `0 <= alpha <= 1`, symmetry, or agreement⇒α=1) and they prove the code
 satisfies it. They are the natural *next* step once a human has confirmed the formula a
 backend printed — but they cannot supply the formula themselves. That is exactly why the
-`@functional` workflow here is **print-for-inspection first** (this module), with formal
-verification and Fable-drafted property tests as follow-ons.
+`@functional` workflow here is **print-for-inspection first** (this module), with
+differential testing and formal verification as follow-ons.
