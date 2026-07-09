@@ -13,6 +13,7 @@ from __future__ import annotations
 from .annotations import annotation_of, data_input, data_output, functional, mapping
 from .registry import REGISTRY, AnnotationInfo, KINDS, Registry
 from .runner import Report, Runner, render_json, render_text
+from .verify import DiffResult, differential_check
 
 __all__ = [
     "functional",
@@ -28,6 +29,8 @@ __all__ = [
     "Report",
     "render_text",
     "render_json",
+    "differential_check",
+    "DiffResult",
 ]
 
 __version__ = "0.1.0"

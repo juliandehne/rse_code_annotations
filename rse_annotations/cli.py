@@ -1,21 +1,39 @@
 """Command-line entry point.
 
+After ``pip install rse-code-annotations`` this is available as the
+``rse-annotations`` console command (and as ``python -m rse_annotations.cli``).
+
 Examples::
 
-    python -m rse_annotations.cli run examples.sample_pipeline
-    python -m rse_annotations.cli run mypkg --json
-    python -m rse_annotations.cli run mypkg --no-stubs        # skip Fable entirely
-    python -m rse_annotations.cli run mypkg --no-probe        # assume Fable if key set
+    rse-annotations run examples.sample_pipeline
+    rse-annotations run compute_icr krippendorff_reference --path src
+    rse-annotations run mypkg --json
+    rse-annotations run mypkg --no-stubs        # skip Fable entirely
+    rse-annotations run mypkg --no-probe        # assume Fable if key set
+
+The current working directory is added to ``sys.path`` automatically, so you can
+run the command from your project root and name top-level modules directly. Use
+``--path DIR`` (repeatable) to add further source roots (e.g. ``--path src``).
 """
 
 from __future__ import annotations
 
 import argparse
 import importlib
+import os
 import sys
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, List, Optional
 
 from .runner import Runner, render_json, render_text
+
+
+def _prepare_sys_path(paths: Optional[List[str]]) -> None:
+    """Prepend the cwd and any ``--path`` dirs to ``sys.path`` for imports."""
+    roots = [os.getcwd()] + list(paths or [])
+    for root in reversed(roots):
+        abs_root = os.path.abspath(root)
+        if abs_root not in sys.path:
+            sys.path.insert(0, abs_root)
 
 
 def _load_fixtures(dotted: Optional[str]) -> Dict[str, Callable]:
@@ -36,8 +54,11 @@ def main(argv: Optional[list] = None) -> int:
     parser = argparse.ArgumentParser(prog="rse_annotations", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
 
-    run = sub.add_parser("run", help="run checks against a target package/module")
-    run.add_argument("target", help="importable dotted path, e.g. examples.sample_pipeline")
+    run = sub.add_parser("run", help="run checks against target package(s)/module(s)")
+    run.add_argument("target", nargs="+",
+                     help="one or more importable dotted paths, e.g. compute_icr")
+    run.add_argument("--path", action="append", metavar="DIR",
+                     help="extra source root(s) to add to sys.path (repeatable)")
     run.add_argument("--json", action="store_true", help="emit JSON instead of text")
     run.add_argument("--no-stubs", action="store_true",
                      help="do not call Fable; snippet-only functional review")
@@ -56,6 +77,7 @@ def main(argv: Optional[list] = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "run":
+        _prepare_sys_path(args.path)
         fixtures = _load_fixtures(args.fixtures)
         runner = Runner(
             args.target,

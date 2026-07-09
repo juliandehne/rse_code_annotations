@@ -155,6 +155,71 @@ def test_formula_inference_handles_non_arithmetic_gracefully():
     assert isinstance(res.notes, list)
 
 
+def test_differential_check_passes_on_equivalent_impls():
+    from rse_annotations.verify import differential_check
+
+    def candidate(a, b):
+        return a * a - b * b
+
+    def reference(a, b):
+        return (a - b) * (a + b)
+
+    def gen(rng):
+        return (rng.uniform(-10, 10), rng.uniform(-10, 10))
+
+    res = differential_check(candidate, reference, gen, trials=100)
+    assert res.ok, res.failures
+    assert res.checked == 100
+    assert res.worst_delta < 1e-9
+
+
+def test_differential_check_detects_mismatch():
+    from rse_annotations.verify import differential_check
+
+    def candidate(a, b):
+        return a + b + 1  # deliberately wrong
+
+    def reference(a, b):
+        return a + b
+
+    def gen(rng):
+        return (rng.randint(0, 5), rng.randint(0, 5))
+
+    res = differential_check(candidate, reference, gen, trials=50)
+    assert not res.ok
+    assert res.failures
+
+
+def test_differential_check_skips_when_reference_rejects():
+    from rse_annotations.verify import differential_check
+
+    def candidate(x):
+        return 1.0 / x
+
+    def reference(x):
+        if x == 0:
+            raise ZeroDivisionError  # out of domain -> skipped, not a failure
+        return 1.0 / x
+
+    def gen(rng):
+        return (rng.randint(0, 3),)  # sometimes 0
+
+    res = differential_check(candidate, reference, gen, trials=60)
+    assert res.skipped > 0
+    assert res.ok  # every comparable trial agrees
+
+
+def test_runner_accepts_multiple_targets():
+    from examples import fixtures as fx
+
+    report = Runner(
+        ["examples.sample_pipeline"],  # list form
+        fixtures=fx.FIXTURES,
+        generate_stubs=False,
+    ).run()
+    assert {fr.name for fr in report.functions}  # non-empty
+
+
 def test_fable_available_without_key(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     status = fable_available(probe=False)

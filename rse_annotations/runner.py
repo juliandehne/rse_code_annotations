@@ -14,8 +14,10 @@ import json
 from dataclasses import dataclass, field, asdict
 from typing import Callable, Dict, List, Optional
 
+from typing import Union
+
 from . import checks as _checks
-from .discovery import discover
+from .discovery import discover_many
 from .fable import FableStatus, Snippet, functional_review
 from .formula import FormulaResult, infer_formula, render_formula
 from .registry import AnnotationInfo
@@ -104,7 +106,7 @@ class Runner:
 
     def __init__(
         self,
-        target: str,
+        target: Union[str, List[str]],
         *,
         fixtures: Optional[Dict[str, Callable]] = None,
         generate_stubs: bool = True,
@@ -112,7 +114,7 @@ class Runner:
         effort: str = "medium",
         infer_formulas: bool = True,
     ) -> None:
-        self.target = target
+        self.targets = [target] if isinstance(target, str) else list(target)
         self.fixtures = fixtures or {}
         self.generate_stubs = generate_stubs
         self.probe = probe
@@ -120,7 +122,7 @@ class Runner:
         self.infer_formulas = infer_formulas
 
     def run(self) -> Report:
-        infos: List[AnnotationInfo] = discover(self.target)
+        infos: List[AnnotationInfo] = discover_many(self.targets)
         report = Report()
 
         for info in infos:
