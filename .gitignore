@@ -5,3 +5,8 @@ __pycache__/
 build/
 dist/
 .venv/
+.claude/
+
+# Written by the tool when it runs against a target tree.
+inspection.yaml
+annotation_coverage.md

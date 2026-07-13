@@ -36,10 +36,14 @@ So mark that subset, and spend the entire inspection budget on it:
    you fill it in, so nothing passes silently.
 4. **Record** it — verdicts are written to `inspection.yaml`. "A human checked this"
    becomes a fact in the repository rather than a recollection.
+5. **See what you have *not* looked at** — the coverage report contrasts what is
+   annotated with what, by the shape of its body, should be. An inspection whose
+   blind spots are invisible is indistinguishable from no inspection at all.
 
 The deliberate limits matter as much as the features. There is no LLM and no network
 anywhere in the tool: you do not audit generated code with another generator. The
-formula is *rendered for a human to judge*, never proved.
+formula is *rendered for a human to judge*, never proved. The coverage suggestions
+are a worklist, not a verdict.
 
 The goal is not to make review automatic. It is to make review **finite** — small
 enough that a working researcher will actually do it, and legible enough that
