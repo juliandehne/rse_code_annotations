@@ -49,10 +49,10 @@ def load_csv(path):
 
 ## The tool
 
-The tool is an **interactive, two-option menu**. Point it at a directory (defaults
+The tool is an **interactive, three-option menu**. Point it at a directory (defaults
 to the current directory); it walks every `*.py` file underneath, imports each so
 its decorators register, and collects the annotations found there. No LLM, no
-network — the two options are:
+network — the three options are:
 
 ```bash
 python -m rse_annotations.cli path/to/src
@@ -64,8 +64,9 @@ Found 6 annotation(s) under <root>
 
   1) Inspect @functional annotations
   2) Generate unit-test stubs
+  3) Report annotation coverage + candidates
   q) Quit
-Choose [1/2/q]:
+Choose [1/2/3/q]:
 ```
 
 **Option 1 — Inspect `@functional` annotations.** Each `@functional` snippet is
@@ -82,11 +83,62 @@ shape-transform check; `@data_input`/`@data_output` a `tmp_path` read/write chec
 Every stub body calls `pytest.skip(...)`, so nothing silently passes until you fill
 it in. Files are written to `<root>/tests/test_<module>.py` (Python convention).
 
-You can skip the menu with `--inspect` or `--stubs`:
+**Option 3 — Report annotation coverage.** Options 1 and 2 act on what *is* annotated.
+Option 3 answers the prior question: **how much of this codebase is annotated at all,
+and what should be annotated next?** It is **purely static** — every `*.py` under the
+root is parsed with `ast`, nothing is imported and nothing is executed — because (a) an
+unannotated function never runs a decorator, so reflection can never see it, and (b)
+research code frequently will not import at all (missing optional dependency, a
+`sys.exit()` at module scope, an API key read at import time).
+
+```
+Annotation coverage for <root>
+  29 file(s), 267 function(s)/method(s) found; 254 eligible
+  annotated: 6/254  (2%)
+
+kind          annotated  candidates
+------------  ---------  ----------
+@functional   1          11
+@mapping      3          113
+@data_input   1          40
+@data_output  1          42
+
+Candidates for annotation (210)
+suggest       conf  function                  location                      why
+------------  ----  ------------------------  ----------------------------  ----------------------------------
+@functional   high  compute_effective_target  src/topup_goldstandard.py:84  pure: arithmetic only, no I/O
+@data_output  high  save_decisions            src/build_goldstandard.py:474 writes a file/sink: to_csv
+@data_output  low   record_new_category       src/build_goldstandard.py:156 reads open("r") *and* writes open("w")
+                                                                            -- consider splitting
+```
+
+Each unannotated function gets the kind its **body shape** implies (a file write →
+`@data_output`; a file read → `@data_input`; pure arithmetic → `@functional`; an
+argument-in/value-out transform → `@mapping`), plus a confidence and a stated reason.
+Functions that are neither (`main()`, CLI glue) are listed as explicit *non-candidates*
+so the denominator stays honest, as are the exclusions from it (dunders, nested helpers,
+tests). `open` is judged by its **mode**, not its name. The full report — every candidate,
+untruncated — is written to `<root>/annotation_coverage.md`.
+
+The suggestions are heuristic: a **worklist for review, not a verdict**.
+
+You can skip the menu with `--inspect`, `--stubs` or `--coverage`:
 
 ```bash
-python -m rse_annotations.cli src --inspect   # straight to Option 1
+python -m rse_annotations.cli src --inspect    # straight to Option 1
 python -m rse_annotations.cli src --stubs      # straight to Option 2
+python -m rse_annotations.cli src --coverage   # straight to Option 3 (never imports)
+```
+
+Coverage is also available programmatically:
+
+```python
+from rse_annotations import scan_path, render_coverage_markdown
+
+report = scan_path("path/to/src")
+print(f"{report.coverage:.0%} annotated; {len(report.candidates)} candidates")
+for c in report.candidates:
+    print(f"  @{c.suggested} ({c.confidence}) {c.qualname} at {c.location} -- {c.reason}")
 ```
 
 ## Formula inference for `@functional`

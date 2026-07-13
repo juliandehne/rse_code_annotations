@@ -11,6 +11,9 @@ Public API::
 from __future__ import annotations
 
 from .annotations import annotation_of, data_input, data_output, functional, mapping
+from .coverage import (CRITICAL_HAZARDS, HAZARD_HELP, HAZARD_PARENT, HAZARDS,
+                       CoverageReport, FunctionRecord, Hazard,
+                       render_coverage_markdown, render_coverage_text, scan_path)
 from .registry import REGISTRY, AnnotationInfo, KINDS, KIND_HELP, Registry
 from .runner import Report, Runner, render_json, render_text
 from .snippets import Snippet, extract_snippet
@@ -38,6 +41,16 @@ __all__ = [
     "generate_stub_files",
     "differential_check",
     "DiffResult",
+    "scan_path",
+    "CoverageReport",
+    "FunctionRecord",
+    "render_coverage_text",
+    "render_coverage_markdown",
+    "Hazard",
+    "HAZARDS",
+    "HAZARD_PARENT",
+    "HAZARD_HELP",
+    "CRITICAL_HAZARDS",
 ]
 
 __version__ = "0.1.0"

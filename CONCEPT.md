@@ -25,13 +25,25 @@ they are safe to leave in production code.
 | `@data_input`   | is a **boundary where data enters** the system (reads a file / source). | Must actually **read** a file successfully; must document its fields. |
 | `@data_output`  | is a **boundary where data leaves** the system (writes a file / sink). | Must actually **write** a file successfully; must document its fields. |
 
-### Why decorators (reflection) and not pure AST scanning?
+### Why decorators (reflection) *and* AST scanning
 
 Decorators give us two things a static scan cannot: (a) a reliable, import-time **registry**
 of every annotated function with its module/line location, and (b) the ability to **wrap**
-boundary functions so the runner can observe real file I/O at test time. We still use the
-`ast` module for the *placement* checks (see §3), so the design is a hybrid: reflection for
-discovery + observation, AST for structural validation.
+boundary functions so the runner can observe real file I/O at test time.
+
+But reflection is structurally blind to the question *"what is **not** annotated?"* — an
+unannotated function never runs a decorator, so it never enters the registry. And research
+code very often does not import at all (an optional dependency is missing, a script calls
+`sys.exit()` at module scope, an API key is read at import time). Both are exactly the
+conditions under which you most want an audit.
+
+So the design is a **hybrid**:
+
+| | Reflection (import) | AST (parse only) |
+| --- | --- | --- |
+| Sees | annotated functions | **every** function, annotated or not |
+| Needs the code to import | yes | no |
+| Used for | discovery, formula inference, stub generation, I/O-success checks | placement checks (§3), **coverage + candidates** (§5) |
 
 ---
 
@@ -84,11 +96,11 @@ with PASS / WARN / FAIL per function.
 
 ---
 
-## 4. The interactive tool (two options)
+## 4. The interactive tool (three options)
 
 `python -m rse_annotations.cli <path>` is the front door. It walks `<path>` (default:
 the current directory), imports every `*.py` under it so decorators register, collects
-the annotations, and offers a **two-option menu** — no LLM, no network:
+the annotations, and offers a **three-option menu** — no LLM, no network:
 
 **Option 1 — Inspect `@functional` annotations.** Each `@functional` snippet is shown
 one at a time with its source and its **inferred formula** (§ formula inference in the
@@ -109,11 +121,50 @@ Every stub body calls `pytest.skip("TODO: ...")`, so a generated test never sile
 passes until the author fills it in — it cannot bless wrong maths. Files are written to
 `<path>/tests/test_<module>.py` (the conventional Python test location).
 
-`--inspect` / `--stubs` jump straight to one option and skip the menu.
+**Option 3 — Report annotation coverage.** The static audit described in §5.
+
+`--inspect` / `--stubs` / `--coverage` jump straight to one option and skip the menu.
 
 ---
 
-## 5. Package layout
+## 5. Coverage and candidates (static, no import)
+
+Options 1 and 2 act on what *is* annotated. Option 3 answers the prior question — **how
+much of this codebase is annotated at all, and what should be next?** — which is the
+question you actually have when handed a pile of AI-generated research software.
+
+`scan_path(root)` parses every `*.py` under `root` with `ast` (nothing is imported and
+nothing is executed), walks the module/class/function structure, and produces one
+`FunctionRecord` per function and method:
+
+- **Coverage.** How many eligible functions carry one of the four annotations, broken down
+  per kind and per file. *Eligible* excludes dunder methods, nested closures and test
+  functions, so the denominator is not inflated by things an annotation would be
+  meaningless on. Those exclusions are reported, not hidden.
+- **Candidates.** For each *unannotated* function, the kind it most likely deserves,
+  inferred from the same syntax the placement checks use, with a `high`/`medium`/`low`
+  confidence and a stated reason:
+
+  | Body shape | Suggestion |
+  | --- | --- |
+  | writes a file (`to_csv`, `write_text`, `open(p, "w")`, …) | `@data_output` |
+  | reads a file (`read_csv`, `open(p)`, …) | `@data_input` |
+  | **both** reads and writes | `@data_output`, low confidence — *"consider splitting"* |
+  | arithmetic only, returns a value, no I/O | `@functional` |
+  | takes input, returns a transformed value, no I/O | `@mapping` |
+  | returns nothing, does no I/O | *not a candidate* — procedural glue |
+
+  `open` is classified by its **mode**, not its name, so `open(p, "w")` is a write. Names
+  that only *look* like I/O (`json.loads`, `df.to_dict`, `pd.to_numeric`) are excluded, or
+  the `read_`/`to_` prefix rules would label half of pandas as a boundary. A bare
+  `x.write(...)` is reported but never at high confidence — it may be a logger.
+
+The suggestions are a **worklist for a human**, not a verdict. The report is printed as a
+table and written in full to `<path>/annotation_coverage.md`.
+
+---
+
+## 6. Package layout
 
 ```
 rse_code_annotations/
@@ -125,6 +176,7 @@ rse_code_annotations/
 │   ├── annotations.py          # @functional / @mapping / @data_input / @data_output
 │   ├── registry.py             # AnnotationInfo, REGISTRY, KINDS/KIND_HELP
 │   ├── discovery.py            # import by dotted name or by walking a path
+│   ├── coverage.py             # AST-only coverage table + annotation candidates
 │   ├── checks.py               # AST placement + docstring + I/O-success checks
 │   ├── snippets.py             # reviewable source snippets (no deps)
 │   ├── formula.py              # AST / SymPy / latexify formula inference
@@ -132,15 +184,69 @@ rse_code_annotations/
 │   ├── inspection.py           # interactive @functional review + inspection.yaml
 │   ├── verify.py               # differential-testing harness
 │   ├── runner.py               # orchestration + Report
-│   └── cli.py                  # `python -m rse_annotations.cli <path>` (two-option menu)
+│   └── cli.py                  # `python -m rse_annotations.cli <path>` (three-option menu)
 ├── examples/
 │   └── sample_pipeline.py      # one function of each kind, correct + incorrect
 └── tests/
-    └── test_framework.py
+    ├── test_framework.py
+    └── test_coverage.py
 ```
 
-## 6. Non-goals
+## 7. Audit hazards (static, no import)
+
+The four annotations answer **"where does data flow?"**. The first full coverage run (on the
+`lni_study` testbed) showed that this leaves the audit questions unasked: the study's LLM
+call, its corpus sampler and its headline statistic all land in `@mapping`, which absorbed
+54% of candidates and is therefore closer to a residual than a category.
+
+So `scan_path` also reports a second, **orthogonal** axis — **"where can the result be
+wrong, and can I reproduce it?"** Each hazard is a *specialisation* of a dataflow kind: it
+inherits the parent's contract and adds one of its own.
+
+| Hazard | Specialises | The claim it makes |
+| --- | --- | --- |
+| `@model_call` | `@data_input` | data enters from a **model** — non-deterministic, and no failure path may fabricate |
+| `@human_input` | `@data_input` | data enters from a **person** (coding / annotation / gold standard) — the coders, the codebook version and an inter-coder reliability figure must be recoverable |
+| `@external_tool` | — | the computation **leaves the process** — the binary and its **version** are part of the method, and a missing one must fail loudly |
+| `@stochastic` | `@functional` | pure **given the seed** — so the seed must be a parameter, and same-seed calls must agree |
+| `@statistical` | `@functional` | returns a number the paper reports — must be pinned against a reference implementation |
+| `@unit_of_analysis` | `@mapping` | records in, **fewer** records out — every drop needs a logged reason |
+| `@config` | — | supplies a threshold/hyperparameter — must land in the provenance record |
+| `@human_decision` | — | a person decides here, **at run time** — the judgement, decider and time must be recorded |
+| `@validation` | — | asserts a property of the data — and **a guard nobody calls is worse than no guard** |
+
+`@model_call` and `@human_input` are deliberately siblings: in an AI-assisted study every
+datum was produced by a model or by a person, and an audit that cannot say **which** is not
+an audit. `@external_tool` is the one hazard with no dataflow parent — a subprocess may
+read, write, both or neither, which is exactly why the four annotations cannot see it.
+
+A function has **one dataflow role and zero or more hazards**, so hazards are computed for
+annotated functions too. Three details make the map usable on real code:
+
+- **Provenance hazards propagate along the call graph.** `classify_paper` never touches the
+  OpenAI client — it calls `_complete_with_retries`, which does. Callers inherit the hazard,
+  marked `indirect`. The dangerous call is always a few layers down. Only the four "where did
+  this value come from?" hazards travel (model, person, subprocess, RNG); `@config` and
+  `@validation` are properties of the function itself.
+- **Only randomness that reaches the result counts.** `random.random()` used to jitter a
+  retry backoff is not a reproducibility hazard, and flagging it would (via propagation)
+  taint every function above it.
+- **A filename is evidence; a sentence is not.** Human provenance is keyed on path literals
+  (`coding_*.csv`, `gold_human_*`), never on prose — an argparse `help=` string that mentions
+  the goldstandard says nothing about what the function reads. For the same reason the token
+  *annotation* is not a human marker: in the testbed `annotations_*_checkpoint.csv` is the
+  **model's** output.
+
+This is **detection, not enforcement** — no decorator, no runtime check yet.
+[`PROPOSED_ANNOTATIONS.md`](PROPOSED_ANNOTATIONS.md) works through the evidence, the
+checkable contract for each hazard, and what enforcement would take.
+
+---
+
+## 8. Non-goals
 
 - Proving mathematical correctness automatically (we *assist* review, not replace it).
 - Enforcing purity at runtime (the purity check is a best-effort static lint).
 - Being a general test framework — it wraps `pytest`/`unittest`, it does not replace them.
+- Deciding for you what to annotate — coverage produces a *worklist*, not a verdict, and
+  its suggestions carry an explicit confidence for exactly that reason.

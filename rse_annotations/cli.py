@@ -7,7 +7,7 @@ current directory is used::
     python -m rse_annotations.cli                 # scan the current directory
     python -m rse_annotations.cli path/to/src     # scan a specific directory
 
-It discovers the annotations, then offers exactly two actions:
+It discovers the annotations, then offers exactly three actions:
 
     1) Inspect @functional annotations -- step through each one, see its source and
        inferred formula, and accept or decline it. Verdicts are written to
@@ -17,7 +17,14 @@ It discovers the annotations, then offers exactly two actions:
     2) Generate unit-test stubs -- for every annotation, emit a pattern-based
        ``pytest`` scaffold (no LLM required) under ``<path>/tests/``.
 
-Pass ``--inspect`` or ``--stubs`` to pick an action directly and skip the menu.
+    3) Report annotation coverage -- statically (AST, no import) walk every function
+       and method in the tree, table up how much of it is annotated, and list the
+       unannotated functions that are candidates, with the kind each one looks like.
+       Written to ``<path>/annotation_coverage.md``.
+
+Pass ``--inspect``, ``--stubs`` or ``--coverage`` to pick an action directly and skip
+the menu. ``--coverage`` never imports the target, so it also works on code that does
+not import cleanly.
 """
 
 from __future__ import annotations
@@ -27,6 +34,7 @@ import sys
 from pathlib import Path
 from typing import Callable, List, Optional
 
+from .coverage import render_coverage_markdown, render_coverage_text, scan_path
 from .discovery import discover_path
 from .inspection import run_inspection
 from .registry import AnnotationInfo, KINDS
@@ -40,11 +48,12 @@ def _summarise(infos: List[AnnotationInfo]) -> str:
 
 
 def _choose(input_fn: Callable[[str], str], output_fn: Callable[[str], None]) -> Optional[str]:
-    """Show the two-option menu and return 'inspect', 'stubs', or None to quit."""
+    """Show the menu and return 'inspect', 'stubs', 'coverage', or None to quit."""
     output_fn("")
     output_fn("Choose an action:")
     output_fn("  1) Inspect @functional annotations   (accept/decline each -> inspection.yaml)")
     output_fn("  2) Generate unit-test stubs for all annotations   (-> tests/)")
+    output_fn("  3) Report annotation coverage + candidates   (-> annotation_coverage.md)")
     while True:
         try:
             choice = input_fn("> ").strip().lower()
@@ -54,9 +63,11 @@ def _choose(input_fn: Callable[[str], str], output_fn: Callable[[str], None]) ->
             return "inspect"
         if choice in ("2", "stubs", "s"):
             return "stubs"
+        if choice in ("3", "coverage", "c"):
+            return "coverage"
         if choice in ("q", "quit", "", "exit"):
             return None
-        output_fn("  please enter 1 or 2 (or q to quit)")
+        output_fn("  please enter 1, 2 or 3 (or q to quit)")
 
 
 def _do_inspect(infos, root: Path, input_fn, output_fn) -> int:
@@ -83,6 +94,18 @@ def _do_stubs(infos, root: Path, output_fn) -> int:
     return 0
 
 
+def _do_coverage(root: Path, output_fn) -> int:
+    """Static coverage scan: no import, so it works on code that won't load."""
+    report = scan_path(root)
+    output_fn("")
+    output_fn(render_coverage_text(report))
+    out_path = root / "annotation_coverage.md"
+    out_path.write_text(render_coverage_markdown(report), encoding="utf-8")
+    output_fn("")
+    output_fn(f"Full report (every candidate) written to {out_path}")
+    return 0
+
+
 def main(
     argv: Optional[list] = None,
     *,
@@ -101,6 +124,8 @@ def main(
                       help="inspect @functional annotations (skip the menu)")
     mode.add_argument("--stubs", action="store_true",
                       help="generate unit-test stubs (skip the menu)")
+    mode.add_argument("--coverage", action="store_true",
+                      help="report annotation coverage + candidates, statically (skip the menu)")
     args = parser.parse_args(argv)
 
     root = Path(args.path).resolve()
@@ -108,13 +133,18 @@ def main(
         output_fn(f"error: {root} is not a directory")
         return 2
 
+    # Coverage is purely syntactic: skip discovery entirely so the report also works
+    # on trees that cannot be imported (missing deps, sys.exit() at module scope, ...).
+    if args.coverage:
+        return _do_coverage(root, output_fn)
+
     infos = discover_path(root)
     output_fn(f"Scanned {root}")
     output_fn(f"Found {len(infos)} annotation(s): {_summarise(infos)}")
     if not infos:
-        output_fn("Nothing to do. Decorate functions with the four annotations first:")
-        output_fn("    from rse_annotations import functional, mapping, data_input, data_output")
-        return 0
+        output_fn("No annotations yet. Here is where they would go "
+                  "(coverage scan of the same tree):")
+        return _do_coverage(root, output_fn)
 
     if args.inspect:
         action = "inspect"
@@ -127,6 +157,8 @@ def main(
         return _do_inspect(infos, root, input_fn, output_fn)
     if action == "stubs":
         return _do_stubs(infos, root, output_fn)
+    if action == "coverage":
+        return _do_coverage(root, output_fn)
     output_fn("No action chosen.")
     return 0
 
