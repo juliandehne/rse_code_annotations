@@ -6,6 +6,45 @@ network.
 
 See [`CONCEPT.md`](CONCEPT.md) for the full design rationale.
 
+## Why
+
+Research code is increasingly written by a machine. The scientist who publishes on
+top of it is still the one answerable for whether the result is valid. That gap —
+between who wrote the code and who vouches for it — is what this repository is
+about.
+
+The two obvious answers both fail in practice:
+
+- **Read all of it.** Nobody reviews four thousand lines of plausible-looking
+  generated Python line by line. Not the author, and certainly not a peer reviewer.
+- **Prove all of it.** Formal verification is real, and its cost is far outside what
+  a working research group can pay. (See
+  [`FORMULA_INFERENCE.md`](FORMULA_INFERENCE.md) for where Dafny/Why3/Coq do fit.)
+
+What makes inspection tractable is that **not all research code carries the
+scientific claim**. Most of it is glue: argument parsing, plotting, moving files
+around. Validity rests on a much smaller subset — the mathematics, and the points
+where data enters and leaves the program. If a generated statistic divides by the
+wrong denominator, the paper is wrong. If the `--help` text is clumsy, it is not.
+
+So mark that subset, and spend the entire inspection budget on it:
+
+1. **Annotate** what carries the claim — four decorators, nothing else to learn.
+2. **Inspect** it — the tool renders the *formula* the code implies, so you check a
+   line of maths against your intent instead of re-reading an implementation.
+3. **Test** it — a `pytest` stub per annotation kind, each one calling `skip()` until
+   you fill it in, so nothing passes silently.
+4. **Record** it — verdicts are written to `inspection.yaml`. "A human checked this"
+   becomes a fact in the repository rather than a recollection.
+
+The deliberate limits matter as much as the features. There is no LLM and no network
+anywhere in the tool: you do not audit generated code with another generator. The
+formula is *rendered for a human to judge*, never proved.
+
+The goal is not to make review automatic. It is to make review **finite** — small
+enough that a working researcher will actually do it, and legible enough that
+someone else can see that it was done.
+
 ## Install
 
 ```bash
