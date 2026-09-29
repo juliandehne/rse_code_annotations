@@ -14,10 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
-
-from .formula import infer_formula
 from .registry import AnnotationInfo
-from .snippets import extract_snippet
 
 VERDICTS = ("accepted", "declined", "pending")
 
@@ -106,17 +103,9 @@ def load_yaml(path: Path) -> List[Verdict]:
 
 
 # --------------------------------------------------------------------------- #
-# Interactive loop
+# Interactive loop -- kept as a function for existing callers; the logic lives
+# in :class:`rse_annotations.review.Reviewer`.
 # --------------------------------------------------------------------------- #
-
-def _formula_line(info: AnnotationInfo) -> str:
-    res = infer_formula(info)
-    if res.ast_forms:
-        return res.ast_forms[0]
-    if res.sympy_form:
-        return res.sympy_form
-    return "(no closed-form formula could be inferred; inspect the source)"
-
 
 def run_inspection(
     infos: List[AnnotationInfo],
@@ -127,76 +116,9 @@ def run_inspection(
 ) -> List[Verdict]:
     """Walk every ``@functional`` info, prompt accept/decline, write the log.
 
-    Args:
-        infos: annotations to inspect (non-functional ones are ignored).
-        out_path: where to write ``inspection.yaml``.
-        input_fn/output_fn: injectable I/O for testing (default stdin/stdout).
-
-    Returns:
-        The list of :class:`Verdict` recorded (also written to ``out_path``).
+    Equivalent to ``Reviewer(VerdictStore(out_path), ...).review(infos)``.
     """
-    out_path = Path(out_path)
-    functional = [i for i in infos if i.kind == "functional"]
+    from .review import Reviewer, VerdictStore
 
-    previous = {(v.function, v.location): v for v in load_yaml(out_path)}
-
-    if not functional:
-        output_fn("No @functional annotations found to inspect.")
-        dump = dump_yaml([])
-        out_path.write_text(dump, encoding="utf-8")
-        return []
-
-    verdicts: List[Verdict] = []
-    total = len(functional)
-    for idx, info in enumerate(functional, start=1):
-        snippet = extract_snippet(info)
-        formula = _formula_line(info)
-        prior = previous.get((info.name, info.location))
-
-        output_fn("")
-        output_fn(f"[{idx}/{total}] {info.name}   ({info.location})")
-        output_fn(f"formula: {formula}")
-        if prior and prior.verdict in VERDICTS:
-            output_fn(f"(previously: {prior.verdict})")
-        output_fn("--- source ---")
-        for src_line in snippet.source.splitlines():
-            output_fn(f"    {src_line}")
-
-        default = prior.verdict if prior else "pending"
-        verdict = _ask(input_fn, output_fn, default)
-        verdicts.append(Verdict(
-            function=info.name,
-            location=info.location,
-            kind=info.kind,
-            formula=formula,
-            verdict=verdict,
-        ))
-
-    out_path.write_text(dump_yaml(verdicts), encoding="utf-8")
-    accepted = sum(1 for v in verdicts if v.verdict == "accepted")
-    declined = sum(1 for v in verdicts if v.verdict == "declined")
-    pending = sum(1 for v in verdicts if v.verdict == "pending")
-    output_fn("")
-    output_fn(f"Recorded {len(verdicts)} verdict(s): "
-              f"{accepted} accepted, {declined} declined, {pending} pending.")
-    output_fn(f"Written to {out_path}")
-    return verdicts
-
-
-def _ask(input_fn, output_fn, default: str) -> str:
-    """Prompt for a single accept/decline/skip verdict; returns a VERDICTS value."""
-    prompt = "Accept this @functional as correct? [y]es / [n]o / [s]kip > "
-    while True:
-        try:
-            answer = input_fn(prompt).strip().lower()
-        except EOFError:
-            return default  # non-interactive / stream exhausted -> keep default
-        if answer == "":
-            return default
-        if answer in ("y", "yes"):
-            return "accepted"
-        if answer in ("n", "no"):
-            return "declined"
-        if answer in ("s", "skip"):
-            return "pending"
-        output_fn("  please answer y, n, or s")
+    reviewer = Reviewer(VerdictStore(out_path), input_fn=input_fn, output_fn=output_fn)
+    return reviewer.review(infos)

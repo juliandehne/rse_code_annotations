@@ -35,12 +35,22 @@ The old modules stay as the engine and keep their public API (tests, examples an
 ## Status
 
 - [x] `target.py`, `findings.py`, `analysis/base.py`, `analysis/annotated.py` (commit `5d016d5`)
-- [ ] `analysis/__init__.py`, `analysis/static.py`, `analysis/plugins.py`
-- [ ] responsible-RSE stubs in `analysis/responsible/`, based on `RESPONSIBLE_RSE_PLUGINS.md`
-- [ ] `rendering.py`, `review.py`, `testing.py`, `audit.py`
-- [ ] rebuild the CLI; re-export the new names in `__init__.py`
-- [ ] tests for the class layer: `tests/test_object_model.py`. The 57 existing tests must still pass (`python -m pytest -q`).
-- [ ] update `ARCHITECTURE.md` and republish the architecture page
+- [x] `analysis/__init__.py`, `analysis/static.py`, `analysis/plugins.py` (the registry class is named `AnalyzerCatalog`)
+- [x] 15 responsible-RSE stubs in `analysis/responsible/` (`reuse`, `integrity`, `safety`, `inclusion`), based on `RESPONSIBLE_RSE_PLUGINS.md`
+- [x] `rendering.py`, `review.py`, `testing.py`, `audit.py`
+- [x] CLI rebuilt (`--analyze`, `--list-analyzers`, `--only`, `--format`, URL targets); new names re-exported in `__init__.py`
+- [x] `tests/test_object_model.py` (26 tests); 83 tests pass in total
+- [x] update `ARCHITECTURE.md` and republish the architecture page
 - [ ] later: optionally move engine code into the classes, and retire `runner.Runner` in favour of `Audit`
+
+## Open todos
+
+- [ ] **Analyse EVERSE RSQKit** (https://everse.software/RSQKit/, the Research Software Quality Kit) for plugin ideas and existing work:
+  - map its quality indicators and tasks onto our analyzers and the 15 Responsible-RSE stubs;
+  - note tools and prior work to reuse or cite (in the stub docstrings and in `RESPONSIBLE_RSE_PLUGINS.md`);
+  - list gaps, i.e. new plugin ideas.
+  - The user added this on 2026-09-29; it has not started yet.
+- [ ] Check the 3 items marked [unverified] in `RESPONSIBLE_RSE_PLUGINS.md` before handing the stubs to students.
+- [ ] Merge `refactor/object-model` into `main` once reviewed. The user merges; never push.
 
 Python: `/c/Users/julian.dehne/AppData/Local/Programs/Python/Python313/python.exe`.

@@ -25,6 +25,14 @@ It discovers the annotations, then offers exactly three actions:
 Pass ``--inspect``, ``--stubs`` or ``--coverage`` to pick an action directly and skip
 the menu. ``--coverage`` never imports the target, so it also works on code that does
 not import cleanly.
+
+Beyond the menu, ``--analyze`` runs the pluggable analyzers (built-ins, the
+Responsible-RSE stubs and installed plugins) and ``--list-analyzers`` shows them::
+
+    python -m rse_annotations.cli src --analyze --only coverage,hazards
+    python -m rse_annotations.cli src --analyze --format json > audit.json
+
+The target may also be a git URL; it is shallow-cloned into a temporary directory.
 """
 
 from __future__ import annotations
@@ -34,11 +42,12 @@ import sys
 from pathlib import Path
 from typing import Callable, List, Optional
 
-from .coverage import render_coverage_markdown, render_coverage_text, scan_path
-from .discovery import discover_path
-from .inspection import run_inspection
+from .analysis.plugins import default_catalog
+from .audit import Audit
+from .coverage import render_coverage_markdown, render_coverage_text
 from .registry import AnnotationInfo, KINDS
-from .stubs import generate_stub_files
+from .rendering import RENDERERS, TextRenderer
+from .target import TargetProject, is_url
 
 
 def _summarise(infos: List[AnnotationInfo]) -> str:
@@ -70,40 +79,46 @@ def _choose(input_fn: Callable[[str], str], output_fn: Callable[[str], None]) ->
         output_fn("  please enter 1, 2 or 3 (or q to quit)")
 
 
-def _do_inspect(infos, root: Path, input_fn, output_fn) -> int:
-    out_path = root / "inspection.yaml"
-    run_inspection(infos, out_path, input_fn=input_fn, output_fn=output_fn)
+def _do_inspect(audit: Audit, input_fn, output_fn) -> int:
+    audit.reviewer(input_fn=input_fn, output_fn=output_fn).review(audit.target.annotations())
     return 0
 
 
-def _do_stubs(infos, root: Path, output_fn) -> int:
-    out_dir = root / "tests"
-    files = generate_stub_files(infos, out_dir)
-    if not files:
-        output_fn("No annotations found; nothing to scaffold.")
-        return 0
-    out_dir.mkdir(parents=True, exist_ok=True)
-    written = 0
-    for sf in files:
-        sf.path.write_text(sf.content, encoding="utf-8")
-        output_fn(f"  wrote {sf.path}  ({sf.stub_count} annotation(s) from {sf.source_module})")
-        written += sf.stub_count
-    output_fn("")
-    output_fn(f"Generated {written} stub(s) across {len(files)} file(s) in {out_dir}")
-    output_fn("Every test is a SKIPPED scaffold -- fill in the TODOs to make them run.")
+def _do_stubs(audit: Audit, output_fn) -> int:
+    audit.test_generator().write(output_fn)
     return 0
 
 
-def _do_coverage(root: Path, output_fn) -> int:
+def _do_coverage(target: TargetProject, output_fn) -> int:
     """Static coverage scan: no import, so it works on code that won't load."""
-    report = scan_path(root)
+    report = target.static_scan()
     output_fn("")
     output_fn(render_coverage_text(report))
-    out_path = root / "annotation_coverage.md"
+    out_path = target.output_path("annotation_coverage.md")
     out_path.write_text(render_coverage_markdown(report), encoding="utf-8")
     output_fn("")
     output_fn(f"Full report (every candidate) written to {out_path}")
     return 0
+
+
+def _do_list(output_fn) -> int:
+    catalog = default_catalog()
+    for cls in catalog.classes():
+        state = cls.when if cls().available() else f"{cls.when}, unavailable"
+        tier = getattr(cls, "tier", None)
+        if tier:
+            state += f", tier {tier}"
+        output_fn(f"  {cls.name:<22} [{state}]  {cls.description}")
+    for ep, err in catalog.errors:
+        output_fn(f"  (plugin {ep} failed to load: {err})")
+    return 0
+
+
+def _do_analyze(audit: Audit, only, fmt: str, verbose: bool, output_fn) -> int:
+    report = audit.run(only=only)
+    renderer = TextRenderer(verbose=verbose) if fmt == "text" else RENDERERS[fmt]()
+    output_fn(renderer.render_results(report.results))
+    return 0 if report.ok else 1
 
 
 def main(
@@ -118,7 +133,7 @@ def main(
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("path", nargs="?", default=".",
-                        help="directory of code to scan (default: current directory)")
+                        help="directory or git URL of code to scan (default: current directory)")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--inspect", action="store_true",
                       help="inspect @functional annotations (skip the menu)")
@@ -126,25 +141,46 @@ def main(
                       help="generate unit-test stubs (skip the menu)")
     mode.add_argument("--coverage", action="store_true",
                       help="report annotation coverage + candidates, statically (skip the menu)")
+    mode.add_argument("--analyze", action="store_true",
+                      help="run the pluggable analyzers and print their findings")
+    mode.add_argument("--list-analyzers", action="store_true",
+                      help="list built-in, stub and plugin analyzers, then exit")
+    parser.add_argument("--only", default=None,
+                        help="with --analyze: comma-separated analyzer names")
+    parser.add_argument("--format", choices=sorted(RENDERERS), default="text",
+                        help="with --analyze: output format (default: text)")
+    parser.add_argument("-v", "--verbose", action="store_true",
+                        help="with --analyze: also show info findings")
     args = parser.parse_args(argv)
 
-    root = Path(args.path).resolve()
-    if not root.is_dir():
-        output_fn(f"error: {root} is not a directory")
-        return 2
+    if args.list_analyzers:
+        return _do_list(output_fn)
+
+    if is_url(args.path):
+        target = TargetProject.from_url(args.path)
+    else:
+        target = TargetProject.from_path(Path(args.path).resolve())
+        if not target.root.is_dir():
+            output_fn(f"error: {target.root} is not a directory")
+            return 2
+    audit = Audit(target)
+
+    if args.analyze:
+        only = [n.strip() for n in args.only.split(",")] if args.only else None
+        return _do_analyze(audit, only, args.format, args.verbose, output_fn)
 
     # Coverage is purely syntactic: skip discovery entirely so the report also works
     # on trees that cannot be imported (missing deps, sys.exit() at module scope, ...).
     if args.coverage:
-        return _do_coverage(root, output_fn)
+        return _do_coverage(target, output_fn)
 
-    infos = discover_path(root)
-    output_fn(f"Scanned {root}")
+    infos = target.annotations()
+    output_fn(f"Scanned {target.root}")
     output_fn(f"Found {len(infos)} annotation(s): {_summarise(infos)}")
     if not infos:
         output_fn("No annotations yet. Here is where they would go "
                   "(coverage scan of the same tree):")
-        return _do_coverage(root, output_fn)
+        return _do_coverage(target, output_fn)
 
     if args.inspect:
         action = "inspect"
@@ -154,11 +190,11 @@ def main(
         action = _choose(input_fn, output_fn)
 
     if action == "inspect":
-        return _do_inspect(infos, root, input_fn, output_fn)
+        return _do_inspect(audit, input_fn, output_fn)
     if action == "stubs":
-        return _do_stubs(infos, root, output_fn)
+        return _do_stubs(audit, output_fn)
     if action == "coverage":
-        return _do_coverage(root, output_fn)
+        return _do_coverage(target, output_fn)
     output_fn("No action chosen.")
     return 0
 

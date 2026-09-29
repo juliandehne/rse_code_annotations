@@ -43,8 +43,12 @@ class Analyzer(ABC):
     imports_target: ClassVar[bool] = False
 
     def available(self) -> bool:
-        """False if an optional dependency is missing; the analyzer is then skipped."""
+        """False if the analyzer cannot run here; it is then skipped, not failed."""
         return True
+
+    def unavailable_reason(self) -> str:
+        """Why :meth:`available` is False -- shown in place of the analyzer's findings."""
+        return "an optional dependency is not installed"
 
     @abstractmethod
     def analyze(self, target) -> AnalysisResult:
