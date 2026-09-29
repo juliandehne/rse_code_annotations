@@ -93,9 +93,10 @@ classDiagram
         +url: str?
         +ref: str?
         +name: str
-        +root: Path  «lazy git clone»
+        +root: Path (lazy clone)
         +parse(spec)$
-        +from_path(p)$ / from_url(u)$
+        +from_path(p)$
+        +from_url(u)$
         +annotations() list~AnnotationInfo~
         +static_scan() CoverageReport
         +output_path(name) Path
@@ -123,7 +124,7 @@ classDiagram
         <<abstract>>
         +tier: A|B|C
         +effort, proposal, hooks, tools
-        available() = False
+        +available() False
     }
     Analyzer <|-- AnnotationAnalyzer
     Analyzer <|-- StaticAnalyzer

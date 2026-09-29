@@ -441,3 +441,54 @@ tracing, provenance records). Detection is a worklist; enforcement is the contri
 *(Housekeeping, unrelated to the taxonomy: the scan currently includes `src/annotate_lni.fix.py`,
 `src/confirm_positives.fix.py` and `src/confirm_positives.prebak.py`, which inflates every
 count — 3 of the 29 modules are backups. `coverage.py` should grow an `--exclude` glob.)*
+
+## 9. Idea (not yet built): the "danger zone" across SemRepo
+
+`lni_study` is a single testbed — one study we happen to know intimately. It answers
+*"does the scan find real hazards in code we understand?"* but not *"how large is the
+reproducibility-critical surface across research software in general?"* The scanner is
+already the right instrument for that second question: it is pure static AST, imports
+nothing, calls no network and needs no LLM, so it runs unchanged on any checkout.
+
+**The corpus.** [SemRepo](https://github.com/faerber-lab/SemRepo) (Faerber Lab, TU Dresden)
+is an RDF knowledge graph of ~197k GitHub repositories linked to scientific publications —
+fine-grained per-repo metadata (contributors, issues, dependencies, languages), a public
+SPARQL endpoint, and Zenodo dumps. It is ~95% Jupyter / ~5% Python. That gives a *sampling
+frame of already-curated research software* plus the metadata to slice it (by field, by
+dependency, by whether a paper links back).
+
+**The measurement — the "danger zone."** For a sampled repo, run `scan_path` and report the
+audit-hazard density: fraction of eligible functions that are hazards, and the tighter
+"reproducibility-critical" fraction (direct `@model_call` / `@human_input` /
+`@external_tool` / `@stochastic` / `@statistical`). `lni_study` sits at 43% / 36 functions;
+the open question is where a *distribution* of research repos sits, and how the
+reproducibility-critical fraction correlates with field, size, or dependency set. That
+per-repo critical fraction is the "danger zone": the share of the code an auditor cannot take
+on trust.
+
+**The "assuming code was generated" framing.** The hazards matter most when the code was
+LLM-generated and shipped with little review — nobody wrote down the seed, the coder pool,
+the tool version, or which number is the reported statistic. Treating the whole corpus *as
+if* generated turns the danger-zone fraction into an estimate of the per-repo provenance
+surface an auditor (or the paper's own reviewer) would have to reconstruct by hand. It also
+sets up the framework's actual pitch: the same scan a human runs post-hoc is the checklist a
+generator should have to satisfy up front.
+
+**What it needs first (why it is not started):**
+- `.ipynb` → source extraction, since ~95% of the corpus is notebooks (the scanner is
+  `.py`-only today).
+- The `--exclude` glob from §8 — at corpus scale, backup/vendored files would skew every
+  distribution.
+- A clone/scan/aggregate harness over a SemRepo sample (SPARQL to pick the frame, then
+  per-repo scan → one hazard-density row), with clear reporting of what was sampled and
+  what was dropped (unparseable files, empty repos).
+- A precise, pre-registered definition of "danger zone" (which hazards, direct-only vs
+  inherited, per-function vs per-line) before any number is quoted.
+
+Standalone from the habilitation, like the rest of this package. Not yet generating — captured
+here so the evaluation design is on record.
+
+**Detail:** the full sketch — why the AST scanner is already a corpus instrument, the precise
+danger-zone definition, the notebook-parsing gap (95% of SemRepo is `.ipynb`), the
+clone/scan/aggregate harness, exact code hook points, sequenced next steps and threats to
+validity — is in [`SEMREPO_EVALUATION.md`](SEMREPO_EVALUATION.md).
