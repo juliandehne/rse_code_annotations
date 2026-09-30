@@ -118,7 +118,7 @@ def run_cli(clone: Path, *args: str, stdin: str = "") -> subprocess.CompletedPro
     env["PYTHONPATH"] = str(PKG_ROOT) + os.pathsep + env.get("PYTHONPATH", "")
     env["PYTHONIOENCODING"] = "utf-8"
     return subprocess.run(
-        [sys.executable, "-m", "rse_annotations.cli", str(clone), *args],
+        [sys.executable, "-m", "rse_annotations", str(clone), *args],
         input=stdin, capture_output=True, text=True, encoding="utf-8",
         errors="replace", env=env, cwd=str(PKG_ROOT), timeout=300,
     )

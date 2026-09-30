@@ -5,11 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "rse-doc-coverage"
 version = "0.1.0"
-description = "Documentation-coverage analyzer plugin for rse_annotations"
+description = "Documentation-coverage plugin for rse_annotations"
 requires-python = ">=3.9"
 dependencies = ["rse-code-annotations"]
 
 # This one line is the whole plugin contract: after `pip install -e .`
-# the analyzer shows up in `--list-analyzers` and runs with `--analyze`.
-[project.entry-points."rse_annotations.analyzers"]
-docs = "rse_doc_coverage:DocCoverageAnalyzer"
+# the plugin shows up in `--list` and runs with `--analyze`.
+[project.entry-points."rse_annotations.plugins"]
+docs = "rse_doc_coverage:DocCoverage"

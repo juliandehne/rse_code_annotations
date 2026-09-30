@@ -1,7 +1,7 @@
 # Exercise: write a documentation-coverage plugin
 
 The test run for the plugin API: can someone who has never seen the code base add
-an analyzer in an afternoon? Do it exactly the way a student would, and note where
+a plugin in an afternoon? Do it exactly the way a student would, and note where
 you get stuck (see *Friction log* below).
 
 ## Steps
@@ -11,23 +11,24 @@ you get stuck (see *Friction log* below).
    pip install -e .                          # from rse_code_annotations/
    pip install -e examples/plugin_template
    ```
-2. Check that it is picked up: `python -m rse_annotations.cli . --list-analyzers`
+2. Check that it is picked up: `python -m rse_annotations --list`
    should list `docs`.
-3. Implement `DocCoverageAnalyzer.analyze_scan` in `rse_doc_coverage/__init__.py`,
+3. Implement `DocCoverage.analyze` in `rse_doc_coverage/__init__.py`,
    one level at a time (the class docstring has the spec).
 4. Run the acceptance tests: `pytest examples/plugin_template/tests`.
    Level 2 is skipped until you remove its `skip` marker.
 5. Try it on real code:
    ```
-   python -m rse_annotations.cli <some project> --analyze --only docs
-   python -m rse_annotations.cli <some project> --analyze --only docs --format json
+   python -m rse_annotations <some project> --analyze --only docs
+   python -m rse_annotations <some project> --analyze --only docs --format json
    ```
 
 ## What you need to know (and nothing more)
 
 | You get | From |
 |---|---|
-| `StaticAnalyzer` | subclass it and implement `analyze_scan(report)` |
+| `Plugin` | subclass it and implement `analyze(target)` (the *hazard analysis* mode) |
+| `target.static_scan()` | the parsed code base (never imported), a `CoverageReport` |
 | `report.eligible` | the functions that count, as `FunctionRecord`s |
 | `rec.has_docstring`, `rec.module`, `rec.qualname`, `rec.location`, `rec.file` | per function |
 | `Finding(rule, severity, message, function=, location=, evidence=)` | what you report; severity is `info`, `warn` or `fail` |

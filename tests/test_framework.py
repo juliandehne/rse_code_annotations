@@ -22,8 +22,8 @@ from rse_annotations import (  # noqa: E402
     functional,
     mapping,
 )
-from rse_annotations import checks  # noqa: E402
-from rse_annotations.snippets import extract_snippet  # noqa: E402
+from rse_annotations.inspection import checks  # noqa: E402
+from rse_annotations.inspection.snippets import extract_snippet  # noqa: E402
 
 
 def test_decorator_preserves_behaviour_and_metadata():
@@ -120,7 +120,7 @@ def test_runner_end_to_end_on_example():
 
 
 def test_formula_inference_ast_and_sympy():
-    from rse_annotations.formula import infer_formula
+    from rse_annotations.inspection.formula import infer_formula
 
     @functional
     def rescale(x, lo, hi):
@@ -139,7 +139,7 @@ def test_formula_inference_ast_and_sympy():
 
 
 def test_formula_inference_handles_non_arithmetic_gracefully():
-    from rse_annotations.formula import infer_formula
+    from rse_annotations.inspection.formula import infer_formula
 
     @functional
     def pick(items):
@@ -152,7 +152,7 @@ def test_formula_inference_handles_non_arithmetic_gracefully():
 
 
 def test_differential_check_passes_on_equivalent_impls():
-    from rse_annotations.verify import differential_check
+    from rse_annotations.testing.verify import differential_check
 
     def candidate(a, b):
         return a * a - b * b
@@ -170,7 +170,7 @@ def test_differential_check_passes_on_equivalent_impls():
 
 
 def test_differential_check_detects_mismatch():
-    from rse_annotations.verify import differential_check
+    from rse_annotations.testing.verify import differential_check
 
     def candidate(a, b):
         return a + b + 1  # deliberately wrong
@@ -187,7 +187,7 @@ def test_differential_check_detects_mismatch():
 
 
 def test_differential_check_skips_when_reference_rejects():
-    from rse_annotations.verify import differential_check
+    from rse_annotations.testing.verify import differential_check
 
     def candidate(x):
         return 1.0 / x
@@ -254,7 +254,7 @@ def _write_sample(tmp_path, stem):
 
 
 def test_discover_path_finds_all_kinds(tmp_path):
-    from rse_annotations.discovery import discover_path
+    from rse_annotations.annotations.discovery import discover_path
 
     _write_sample(tmp_path, "pkg_discover")
     infos = discover_path(tmp_path)
@@ -269,8 +269,8 @@ def test_discover_path_finds_all_kinds(tmp_path):
 # --------------------------------------------------------------------------- #
 
 def test_generate_stub_files_covers_every_kind(tmp_path):
-    from rse_annotations.discovery import discover_path
-    from rse_annotations.stubs import generate_stub_files
+    from rse_annotations.annotations.discovery import discover_path
+    from rse_annotations.testing.stubs import generate_stub_files
 
     _write_sample(tmp_path, "pkg_stub")
     infos = discover_path(tmp_path)
@@ -291,8 +291,8 @@ def test_generate_stub_files_covers_every_kind(tmp_path):
 # --------------------------------------------------------------------------- #
 
 def test_run_inspection_records_and_roundtrips(tmp_path):
-    from rse_annotations.discovery import discover_path
-    from rse_annotations.inspection import load_yaml, run_inspection
+    from rse_annotations.annotations.discovery import discover_path
+    from rse_annotations.inspection.verdicts import load_yaml, run_inspection
 
     _write_sample(tmp_path, "pkg_inspect")
     infos = discover_path(tmp_path)
@@ -312,7 +312,7 @@ def test_run_inspection_records_and_roundtrips(tmp_path):
 
 
 def test_run_inspection_default_on_empty_answer(tmp_path):
-    from rse_annotations.discovery import discover_path
+    from rse_annotations.annotations.discovery import discover_path
     from rse_annotations.inspection import run_inspection
 
     _write_sample(tmp_path, "pkg_inspect_default")
@@ -327,7 +327,7 @@ def test_run_inspection_default_on_empty_answer(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# CLI: the two-option tool
+# CLI: the general mode menu
 # --------------------------------------------------------------------------- #
 
 def test_cli_stubs_mode_writes_files(tmp_path):
@@ -360,8 +360,9 @@ def test_cli_menu_dispatches_on_choice(tmp_path):
     from rse_annotations.cli import main
 
     _write_sample(tmp_path, "pkg_cli_menu")
-    # first prompt is the menu ("2" -> stubs); no further input needed
-    answers = iter(["2"])
+    # first prompt is the mode menu ("3" -> test generation); human_code_inspection
+    # is the only plugin offering it, so no plugin prompt follows
+    answers = iter(["3"])
     rc = main(
         [str(tmp_path)],
         input_fn=lambda _p: next(answers),

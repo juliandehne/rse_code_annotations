@@ -5,7 +5,7 @@ import textwrap
 import pytest
 
 from rse_annotations import Audit, TargetProject
-from rse_doc_coverage import DocCoverageAnalyzer
+from rse_doc_coverage import DocCoverage
 
 
 @pytest.fixture
@@ -30,7 +30,7 @@ def project(tmp_path):
 
 
 def _run(project, **kw):
-    return Audit(project, analyzers=[DocCoverageAnalyzer(**kw)]).run().result("docs")
+    return Audit(project, plugins=[DocCoverage(**kw)]).run().result("docs")
 
 
 # ---- level 1 ------------------------------------------------------------- #
@@ -47,9 +47,9 @@ def test_level1_undocumented(project):
 
 
 def test_level1_threshold_gate(project):
-    analyzer = DocCoverageAnalyzer()
-    analyzer.threshold = 0.9
-    result = Audit(project, analyzers=[analyzer]).run().result("docs")
+    plugin = DocCoverage()
+    plugin.threshold = 0.9
+    result = Audit(project, plugins=[plugin]).run().result("docs")
     assert result.status == "fail"
 
 

@@ -13,13 +13,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from rse_annotations.coverage import (  # noqa: E402
-    HAZARD_PARENT,
-    HAZARDS,
-    render_coverage_markdown,
-    render_coverage_text,
-    scan_path,
-)
+from rse_annotations.reporting import render_coverage_markdown, render_coverage_text  # noqa: E402
+from rse_annotations.scan import HAZARD_PARENT, HAZARDS, scan_path  # noqa: E402
 
 
 def _write(tmp_path, name: str, src: str):
@@ -248,11 +243,12 @@ def test_cli_coverage_writes_a_report_without_importing(tmp_path):
     assert not any("could not import" in m for m in msgs)
 
 
-def test_cli_menu_option_three_runs_coverage(tmp_path):
-    from rse_annotations.cli import main as cli_main
+def test_plugin_menu_offers_coverage_as_extra_action(tmp_path):
+    from rse_annotations.plugins.hazards.human_code_inspection.__main__ import main as cli_main
 
     _write(tmp_path, "sample.py", SAMPLE)
-    answers = iter(["3"])
+    # 1) inspect 2) analyze 3) tests 4) coverage
+    answers = iter(["4"])
     rc = cli_main(
         [str(tmp_path)],
         input_fn=lambda _p: next(answers),

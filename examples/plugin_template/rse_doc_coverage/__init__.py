@@ -8,14 +8,14 @@ from __future__ import annotations
 
 from typing import List
 
-from rse_annotations import Finding, StaticAnalyzer
-from rse_annotations.coverage import CoverageReport
+from rse_annotations import Finding, Plugin
 
 
-class DocCoverageAnalyzer(StaticAnalyzer):
+class DocCoverage(Plugin):
     """Share of functions with a docstring, and the undocumented ones.
 
-    Level 1 (about 1 h): use the static scan you are handed.
+    Level 1 (about 1 h): use the static scan of the target.
+        ``report = target.static_scan()`` parses the code without importing it;
         ``report.eligible`` lists every function that counts (dunders, nested
         helpers and test code are already excluded); ``rec.has_docstring`` says
         whether it is documented.
@@ -30,8 +30,7 @@ class DocCoverageAnalyzer(StaticAnalyzer):
         Google (``Args:``), NumPy (``Parameters``) and Sphinx (``:param x:``) styles.
     Level 3 (about 2 h): the project, not just functions.
         Module docstrings, and a README / LICENSE / CITATION.cff next to the code
-        (``target.root``). Hint: override :meth:`analyze` to get the target,
-        call ``super().analyze(target)`` and append findings.
+        (``target.root``).
     """
 
     name = "docs"
@@ -40,7 +39,8 @@ class DocCoverageAnalyzer(StaticAnalyzer):
     #: Fail the audit (a CI gate) below this share of documented functions.
     threshold = 0.5
 
-    def analyze_scan(self, report: CoverageReport):
+    def analyze(self, target):
+        report = target.static_scan()
         findings: List[Finding] = []
         # TODO level 1: the summary finding and one finding per undocumented function.
         #   Make the summary "fail" instead of "info" when the share < self.threshold.

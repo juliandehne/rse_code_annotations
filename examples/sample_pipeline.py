@@ -2,7 +2,7 @@
 
 Point the interactive tool at this directory::
 
-    python -m rse_annotations.cli examples
+    python -m rse_annotations examples
 
 or check it programmatically with ``Audit(TargetProject.from_modules("examples.sample_pipeline")).run()``.
 
