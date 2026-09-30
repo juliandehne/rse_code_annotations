@@ -4,7 +4,7 @@ Point the interactive tool at this directory::
 
     python -m rse_annotations.cli examples
 
-or check it programmatically with ``Runner("examples.sample_pipeline").run()``.
+or check it programmatically with ``Audit(TargetProject.from_modules("examples.sample_pipeline")).run()``.
 
 It intentionally includes one *good* and one *problematic* case so the checks show
 both PASS and FAIL/WARN outcomes.

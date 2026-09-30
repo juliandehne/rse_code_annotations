@@ -1,6 +1,6 @@
 # Architecture
 
-Updated 2026-09-29 for the object-model refactor (branch `refactor/object-model`).
+Updated 2026-09-30 for the object-model refactor (branch `refactor/object-model`).
 Arrows are taken from the real `import` statements (lazy = imported inside a function).
 Mermaid renders on GitHub.
 
@@ -10,8 +10,12 @@ The package has two layers:
   plus `Reviewer` (verdicts), `Renderer` (visualisation) and `TestGenerator` (tests).
   This is what the CLI and new code use.
 - **Engine (unchanged API).** `discovery`, `checks`, `formula`, `snippets`, `coverage`,
-  `inspection`, `stubs`, `verify`, `runner`. The object layer wraps them, so `tests/`,
+  `inspection`, `stubs`, `verify`. The object layer wraps them, so `tests/`,
   `examples/` and the lni_study testbed keep working.
+- **Legacy shim.** `runner.Runner` / `Report` are deprecated. `Runner.run()` now builds an
+  `Audit(TargetProject.from_modules(...))` with the `conventions`, `io` and (optionally) `math`
+  analyzers and regroups the findings into the old per-function `Report`. It emits a
+  `DeprecationWarning`; the output format is unchanged.
 
 ## 1. Module dependencies
 
@@ -40,8 +44,11 @@ flowchart TB
         end
     end
 
+    subgraph legacy["Legacy (deprecated)"]
+        runner["runner<br/>Runner, Report"]
+    end
+
     subgraph engine["Engine (unchanged API)"]
-        runner["runner"]
         inspection["inspection<br/>Verdict, yaml"]
         stubs["stubs"]
         coverage["coverage<br/>scan_path"]
@@ -71,11 +78,12 @@ flowchart TB
     resp --> base
     inspection -. lazy .-> review
 
-    runner --> checks & discovery & formula & snippets & registry
+    runner --> audit & target & annotated & snippets & registry
     coverage --> checks & discovery & registry
     stubs --> formula & registry
 ```
 
+`runner` sits on top of the object layer now, not beside it.
 Two import cycles are avoided with lazy imports: `inspection.run_inspection` now delegates
 to `review.Reviewer`, and `plugins.default_catalog` loads `responsible/` on demand.
 
@@ -91,12 +99,14 @@ classDiagram
     class TargetProject {
         +path: Path?
         +url: str?
+        +modules: list~str~?
         +ref: str?
         +name: str
         +root: Path (lazy clone)
         +parse(spec)$
         +from_path(p)$
         +from_url(u)$
+        +from_modules(mods)$
         +annotations() list~AnnotationInfo~
         +static_scan() CoverageReport
         +output_path(name) Path
@@ -123,6 +133,7 @@ classDiagram
     class ResponsibleRSEStub {
         <<abstract>>
         +tier: A|B|C
+        +difficulty: 1..5 (h/week)
         +effort, proposal, hooks, tools
         +available() False
     }
@@ -238,31 +249,42 @@ todo_count = "my_pkg.checks:TodoCounter"
 
 Then run it with `python -m rse_annotations.cli src --analyze --only todo_count`. To check that it is found, use `--list-analyzers`.
 
+A complete, test-backed exercise lives in `examples/plugin_template/`: a documentation-coverage
+analyzer (`docs`) as a separate pip package, with the class skeleton, a three-level spec and
+acceptance tests. It is the accessibility test for the plugin API (friction log in its README).
+
 ## 4. Responsible-RSE stubs (course tasks)
 
 `analysis/responsible/` holds 15 stubs from `RESPONSIBLE_RSE_PLUGINS.md`. They are listed by
 `--list-analyzers` and are *skipped* in every audit until implemented. Each docstring is the
 task spec ("TODO (Tier X, effort)"), and `_stub.py` explains how to turn one into a working analyzer.
 
-| Module (question) | Analyzer `name` | Tier | when |
-|---|---|---|---|
-| `reuse` — can others legally reuse it? | `licence`, `data_terms` | A | static |
-| | `archival` | C | static |
-| `integrity` — are the results trustworthy? | `silent_failures`, `constants`, `llm_disclosure` | A | static |
-| | `leakage` | B | static |
-| | `inference_ledger` | B | runtime |
-| `safety` — can it harm? | `security` | A | static |
-| | `purpose_retention` | B | static |
-| | `dual_use` | C | static |
-| `inclusion` — is it inclusive and sustainable? | `fairness` | B | test |
-| | `figure_accessibility` | B | static |
-| | `footprint` | B | runtime |
-| | `inclusive_language` | C | static |
+| Module (question) | Analyzer `name` | Tier | when | Difficulty |
+|---|---|---|---|---|
+| `reuse` — can others legally reuse it? | `licence`, `data_terms` | A | static | 3, 3 |
+| | `archival` | C | static | 3 |
+| `integrity` — are the results trustworthy? | `silent_failures`, `constants`, `llm_disclosure` | A | static | 2, 2, 2 |
+| | `leakage` | B | static | 4 |
+| | `inference_ledger` | B | runtime | 5 |
+| `safety` — can it harm? | `security` | A | static | 2 |
+| | `purpose_retention` | B | static | 3 |
+| | `dual_use` | C | static | 2 |
+| `inclusion` — is it inclusive and sustainable? | `fairness` | B | test | 3 |
+| | `figure_accessibility` | B | static | 3 |
+| | `footprint` | B | runtime | 2 |
+| | `inclusive_language` | C | static | 1 |
 
 Tier A = a static check doable in one session; B = needs runtime hooks or a library; C = research-grade.
+**Difficulty** is the class attribute `difficulty` (default 3 in `_stub.py`): the expected student
+workload over a semester including tests, 1 = about 1 h/week ... 5 = about 5 h/week (40 in total).
+Tier says *what kind* of check it is; difficulty says *how much work* it is.
 
-**Open:** analyse [EVERSE RSQKit](https://everse.software/RSQKit/) for ideas and existing work
-to map onto these stubs (see `REFACTOR_NEXT_STEPS.md`).
+**EVERSE.** `EVERSE_MAPPING.md` maps the EVERSE quality dimensions, RSQKit tasks and tool
+catalogue onto these analyzers. EVERSE covers FAIRness, documentation and sustainability well
+(tools to reuse are named in each stub docstring). It has nothing on data licensing, GDPR, LLMs in
+the pipeline, statistical inference, data leakage or dual use; that is where these stubs add
+something. The mapping also lists 8 gap ideas, for example exporting findings in EVERSE's assessment
+format, and a CITATION.cff / codemeta / pyproject consistency check.
 
 ## 5. Engine data classes (unchanged)
 
@@ -271,7 +293,7 @@ to map onto these stubs (see `REFACTOR_NEXT_STEPS.md`).
 | `inspection` | `Verdict` | `inspection.yaml` |
 | `stubs` | `StubFile` | `test_*.py` stubs that `skip()` until filled in |
 | `coverage` | `CoverageReport` → `FunctionRecord` → `Hazard` | `annotation_coverage.md` |
-| `runner` | `Report` (legacy batch path, superseded by `Audit`) | text / JSON |
+| `runner` | `Report` (deprecated; rebuilt from an `AuditReport`) | text / JSON |
 | `verify` | `DiffResult` | — (in memory, for tests) |
 
 Only the standard library is required (`dependencies = []`). SymPy and latexify are loaded lazily inside `formula`.
@@ -280,7 +302,8 @@ Only the standard library is required (`dependencies = []`). SymPy and latexify 
 
 ```mermaid
 flowchart LR
-    tests["tests/ (83 tests)"] --> pkg
+    tests["tests/ (84 tests)"] --> pkg
+    tmpl["examples/plugin_template<br/>rse-doc-coverage (exercise)"] -- "entry point" --> pkg
     examples["examples/sample_pipeline.py"] --> pkg
     demo["scripts/demo_lni_testbed.py"] -- "python -m rse_annotations.cli" --> pkg
     lni["lni_study<br/>branch feat/rse-code-annotations"] -- "pip install -e" --> pkg

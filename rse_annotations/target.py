@@ -14,6 +14,7 @@ Usage::
 
     TargetProject.from_path("src/")
     TargetProject.from_url("https://github.com/org/repo", ref="v1.2")
+    TargetProject.from_modules(["pkg.pipeline"])   # importable dotted module names
     TargetProject.parse(spec)        # a path or a URL, as typed on the command line
 """
 
@@ -25,14 +26,16 @@ import tempfile
 from pathlib import Path
 from typing import Iterator, List, Optional, Union
 
-from .discovery import _iter_python_files, discover_path
+import importlib.util
+
+from .discovery import _iter_python_files, discover_many, discover_path
 from .registry import AnnotationInfo
 
 _URL_RE = re.compile(r"^(https?|git|ssh|file)://|^git@[^:]+:")
 
 
 class TargetProject:
-    """A body of research code identified by a local path and/or a git URL.
+    """A body of research code identified by a local path, a git URL, or module names.
 
     Args:
         path: Local directory holding the code. If ``url`` is also given, this is
@@ -40,6 +43,9 @@ class TargetProject:
         url: Git URL to clone when there is no local copy yet.
         ref: Branch or tag to check out when cloning.
         name: Display name; defaults to the directory or repository name.
+        modules: Importable dotted module names (packages include their
+            submodules). Annotations are then discovered by importing these
+            instead of every file under ``path``.
     """
 
     def __init__(
@@ -49,13 +55,18 @@ class TargetProject:
         url: Optional[str] = None,
         ref: Optional[str] = None,
         name: Optional[str] = None,
+        modules: Optional[List[str]] = None,
     ) -> None:
-        if path is None and url is None:
-            raise ValueError("a TargetProject needs a path or a url")
+        if path is None and url is None and not modules:
+            raise ValueError("a TargetProject needs a path, a url or modules")
         self.url = url
         self.ref = ref
+        self.modules = list(modules) if modules else None
+        if path is None and self.modules:
+            path = _module_dir(self.modules[0])
         self._path = Path(path).resolve() if path is not None else None
-        self.name = name or (self._path.name if self._path else _repo_name(url))
+        self.name = name or (", ".join(self.modules) if self.modules else
+                             self._path.name if self._path else _repo_name(url))
         self._annotations: Optional[List[AnnotationInfo]] = None
         self._scan = None
 
@@ -68,6 +79,11 @@ class TargetProject:
     def from_url(cls, url: str, *, ref: Optional[str] = None,
                  into: Union[str, Path, None] = None, **kw) -> "TargetProject":
         return cls(into, url=url, ref=ref, **kw)
+
+    @classmethod
+    def from_modules(cls, modules: Union[str, List[str]], **kw) -> "TargetProject":
+        """A target made of importable modules, e.g. ``"examples.sample_pipeline"``."""
+        return cls(modules=[modules] if isinstance(modules, str) else list(modules), **kw)
 
     @classmethod
     def parse(cls, spec: str, **kw) -> "TargetProject":
@@ -111,7 +127,8 @@ class TargetProject:
     def annotations(self) -> List[AnnotationInfo]:
         """Annotated functions, found by importing the code (cached)."""
         if self._annotations is None:
-            self._annotations = discover_path(self.root)
+            self._annotations = (discover_many(self.modules) if self.modules
+                                 else discover_path(self.root))
         return list(self._annotations)
 
     def static_scan(self):
@@ -129,6 +146,15 @@ class TargetProject:
     def __repr__(self) -> str:
         where = self.url if self.url and self._path is None else self._path
         return f"TargetProject({self.name!r}, {where})"
+
+
+def _module_dir(module: str) -> Path:
+    """The directory holding ``module``: the package itself, or a module's folder."""
+    spec = importlib.util.find_spec(module)
+    if spec is None or spec.origin is None:
+        raise ModuleNotFoundError(f"cannot locate module {module!r}")
+    origin = Path(spec.origin)
+    return origin.parent
 
 
 def is_url(spec: str) -> bool:

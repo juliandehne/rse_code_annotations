@@ -17,11 +17,18 @@ class LicenceComplianceAnalyzer(ResponsibleRSEStub):
     Tools: ``reuse lint`` (call as subprocess, GPL), ``license-expression`` to parse SPDX
     expressions, optionally ``scancode-toolkit``; a small compatibility table.
     Suggested base: plain ``Analyzer`` (works on the project tree, not on functions).
+    Difficulty: 3/5 (~3 h/week) -- REUSE and SPDX parsing are off the shelf, but resolving
+      dependency licences and a defensible compatibility table (OSADL matrix, CC-BY-4.0)
+      take design and many test fixtures.
+    EVERSE: indicators ``software_has_license``, ``software_has_license_for_file_types``
+      (FAIRness); RSQKit https://everse.software/RSQKit/licensing_software ; resqui's
+      HowFairIs / RSFC plugins only check presence.
     """
 
     name = "licence"
     description = "licence presence and compatibility with dependencies / vendored code"
     tier, effort, proposal = "A", "S–M", "RESPONSIBLE_RSE_PLUGINS.md §2.1"
+    difficulty = 3
     hooks = ("project", "@external_tool")
     tools = ("reuse", "license-expression", "scancode-toolkit")
 
@@ -37,11 +44,18 @@ class DataTermsAnalyzer(ResponsibleRSEStub):
     file with RAI fields; a saved model needs a model card. Propagate the most
     restrictive input licence to each output along the call graph (like hazards).
     Tools: ``mlcroissant``, ``huggingface_hub.ModelCard``.
+    Difficulty: 3/5 (~3 h/week) -- new decorator kwargs, licence propagation over the call
+      graph and Croissant / model-card validation; each part is small, together they need
+      design.
+    EVERSE: no data-licence indicator (a gap on their side); closest are
+      ``descriptive_metadata`` and RSQKit https://everse.software/RSQKit/fair_rs /
+      https://everse.software/RSQKit/software_metadata .
     """
 
     name = "data_terms"
     description = "data licences, consent and datasheets / model cards for outputs"
     tier, effort, proposal = "A", "M", "RESPONSIBLE_RSE_PLUGINS.md §2.6"
+    difficulty = 3
     hooks = ("@data_input", "@human_input", "@data_output")
     tools = ("mlcroissant", "huggingface_hub")
 
@@ -54,11 +68,21 @@ class ArchivalSustainabilityAnalyzer(ResponsibleRSEStub):
     truck factor from ``git log``. CI only (network): is the SWHID archived on Software
     Heritage, does the DOI resolve to the same version, OpenSSF Scorecard.
     Also runs in ``ci``; FAIR4RS F1 / A1 / R1.2.
+    Difficulty: 3/5 (~3 h/week) -- several independent sub-checks (SWHID, CFF vs tag,
+      truck factor) plus network-only CI parts that need mocking in tests.
+    EVERSE: indicators ``archived_in_software_heritage``,
+      ``archived_in_scholarly_repository``, ``persistent_and_unique_identifier``,
+      ``has_releases``, ``versioning_standards_use``, ``software_has_citation``,
+      ``has_active_contributors``, ``project_is_active``; RSQKit
+      https://everse.software/RSQKit/archiving_software ,
+      https://everse.software/RSQKit/software_identifiers ; resqui's RSFC and
+      OpenSSFScorecard plugins implement several of these (reuse or call them in ``ci``).
     """
 
     name = "archival"
     description = "citable, archived, identifiable release; maintenance risk"
     when = "static"
     tier, effort, proposal = "C", "S–M", "RESPONSIBLE_RSE_PLUGINS.md §2.13"
+    difficulty = 3
     hooks = ("project", "@external_tool")
     tools = ("swh.model", "truckfactor", "OpenSSF Scorecard")

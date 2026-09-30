@@ -41,7 +41,9 @@ The old modules stay as the engine and keep their public API (tests, examples an
 - [x] CLI rebuilt (`--analyze`, `--list-analyzers`, `--only`, `--format`, URL targets); new names re-exported in `__init__.py`
 - [x] `tests/test_object_model.py` (26 tests); 83 tests pass in total
 - [x] update `ARCHITECTURE.md` and republish the architecture page
-- [ ] later: optionally move engine code into the classes, and retire `runner.Runner` in favour of `Audit`
+- [x] `runner.Runner` retired as a deprecated shim over `Audit` (`TargetProject.from_modules`, `Report.from_audit`); 84 tests pass (2026-09-30)
+- [x] `examples/plugin_template/`: documentation-coverage exercise (skeleton + 3-level spec + acceptance tests), for the user to solve themselves as the API accessibility test (2026-09-30)
+- [ ] later, optional: move engine code (`checks`, `coverage`, `stubs`) into the classes. Not needed: they are public API used by tests, examples and lni_study
 
 ## Open todos
 
@@ -49,7 +51,7 @@ The old modules stay as the engine and keep their public API (tests, examples an
   - map its quality indicators and tasks onto our analyzers and the 15 Responsible-RSE stubs;
   - note tools and prior work to reuse or cite (in the stub docstrings and in `RESPONSIBLE_RSE_PLUGINS.md`);
   - list gaps, i.e. new plugin ideas.
-  - The user added this on 2026-09-29; it has not started yet.
+  - The user added this on 2026-09-29 and extended it on 2026-09-30 to the whole EVERSE output (not only RSQKit), plus a workload score per stub (`difficulty`, 1 = 1 h/week ... 5 = 5 h/week). Result: `EVERSE_MAPPING.md`.
 - [ ] Check the 3 items marked [unverified] in `RESPONSIBLE_RSE_PLUGINS.md` before handing the stubs to students.
 - [ ] Merge `refactor/object-model` into `main` once reviewed. The user merges; never push.
 

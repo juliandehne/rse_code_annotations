@@ -1,8 +1,12 @@
-"""The runner: discover annotated functions, check them, and report.
+"""The legacy runner: a per-function :class:`Report` built on :class:`~rse_annotations.audit.Audit`.
 
-Pulls together discovery, the checks, review snippets, and formula inference into
-a single :class:`Report`. This is the programmatic API; the interactive two-option
-CLI (inspect / stubs) lives in :mod:`rse_annotations.cli`.
+.. deprecated::
+    :class:`Runner` predates the object model. It is kept so existing callers
+    (tests, examples, the lni_study testbed) keep working, but it no longer has an
+    engine of its own: it builds a :class:`~rse_annotations.target.TargetProject`
+    from module names, runs the ``conventions``, ``io`` and ``math`` analyzers
+    through an :class:`~rse_annotations.audit.Audit`, and regroups the findings per
+    function. New code should use ``Audit`` directly.
 
 Fixtures for the I/O-success checks are supplied by the caller as a mapping from
 ``qualname`` to a ``fixture(tmpdir, tracer) -> (args, kwargs)`` callable. A boundary
@@ -13,15 +17,20 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field, asdict
-from typing import Callable, Dict, List, Optional
-
-from typing import Union
+import warnings
+from typing import Callable, Dict, List, Optional, Union
 
 from . import checks as _checks
-from .discovery import discover_many
-from .formula import FormulaResult, infer_formula, render_formula
+from .analysis.annotated import ConventionAnalyzer, IOAnalyzer, MathAnalyzer
+from .audit import Audit, AuditReport
+from .formula import FormulaResult, render_formula
 from .registry import AnnotationInfo
 from .snippets import Snippet, extract_snippet
+from .target import TargetProject
+
+_STATUS = {"info": "pass", "warn": "warn", "fail": "fail"}
+#: The order :func:`~rse_annotations.checks.all_checks` reports in.
+_ORDER = {"placement": 0, "docstring": 1, "io_success": 2}
 
 
 @dataclass
@@ -46,6 +55,31 @@ class Report:
     functions: List[FunctionReport] = field(default_factory=list)
     snippets: List[Snippet] = field(default_factory=list)
     formulas: List[FormulaResult] = field(default_factory=list)
+
+    @classmethod
+    def from_audit(cls, infos: List[AnnotationInfo], audit: AuditReport) -> "Report":
+        """Regroup an audit's findings per annotated function, in discovery order."""
+        by_fn: Dict[str, List[_checks.CheckResult]] = {i.qualname: [] for i in infos}
+        for name in ("conventions", "io"):
+            try:
+                result = audit.result(name)
+            except KeyError:
+                continue
+            for f in result.findings:
+                if f.function in by_fn:
+                    by_fn[f.function].append(_checks.CheckResult(
+                        f.rule, _STATUS[f.severity], f.message))
+        report = cls(functions=[
+            FunctionReport(i.kind, i.name, i.qualname, i.location,
+                           sorted(by_fn[i.qualname], key=lambda c: _ORDER.get(c.name, 9)))
+            for i in infos])
+        functional = [i for i in infos if i.kind == "functional"]
+        report.snippets = [extract_snippet(i) for i in functional]
+        try:
+            report.formulas = audit.result("math").data or []
+        except KeyError:
+            pass
+        return report
 
     # ---- aggregate accessors ------------------------------------------- #
     @property
@@ -99,7 +133,7 @@ class Report:
 
 
 class Runner:
-    """Orchestrates discovery -> checks -> snippets/formulas -> report."""
+    """Deprecated: discover -> check -> snippets/formulas, via :class:`Audit`."""
 
     def __init__(
         self,
@@ -108,34 +142,21 @@ class Runner:
         fixtures: Optional[Dict[str, Callable]] = None,
         infer_formulas: bool = True,
     ) -> None:
+        warnings.warn("Runner is deprecated; use Audit(TargetProject.from_modules(...))",
+                      DeprecationWarning, stacklevel=2)
         self.targets = [target] if isinstance(target, str) else list(target)
         self.fixtures = fixtures or {}
         self.infer_formulas = infer_formulas
 
-    def run(self) -> Report:
-        infos: List[AnnotationInfo] = discover_many(self.targets)
-        report = Report()
-
-        for info in infos:
-            fixture = self.fixtures.get(info.qualname) or self.fixtures.get(info.name)
-            results = _checks.all_checks(info, fixture=fixture)
-            report.functions.append(
-                FunctionReport(
-                    kind=info.kind,
-                    name=info.name,
-                    qualname=info.qualname,
-                    location=info.location,
-                    checks=results,
-                )
-            )
-
-        report.snippets = [extract_snippet(i) for i in infos if i.kind == "functional"]
-
+    def audit(self) -> Audit:
+        analyzers = [ConventionAnalyzer(), IOAnalyzer(self.fixtures)]
         if self.infer_formulas:
-            report.formulas = [
-                infer_formula(i) for i in infos if i.kind == "functional"
-            ]
-        return report
+            analyzers.append(MathAnalyzer())
+        return Audit(TargetProject.from_modules(self.targets), analyzers=analyzers)
+
+    def run(self) -> Report:
+        audit = self.audit()
+        return Report.from_audit(audit.target.annotations(), audit.run())
 
 
 # --------------------------------------------------------------------------- #

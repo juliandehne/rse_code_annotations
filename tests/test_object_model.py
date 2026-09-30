@@ -232,3 +232,25 @@ def test_cli_analyze_json(tmp_path):
               output_fn=msgs.append)
     data = json.loads(msgs[-1])
     assert rc == 0 and [r["analyzer"] for r in data["results"]] == ["coverage", "hazards"]
+
+
+def test_module_target_audit_matches_legacy_runner():
+    import warnings
+    from examples import fixtures as fx
+    from rse_annotations import (Audit, ConventionAnalyzer, IOAnalyzer, Runner,
+                                 TargetProject)
+
+    target = TargetProject.from_modules("examples.sample_pipeline")
+    assert target.name == "examples.sample_pipeline"
+    report = Audit(target, analyzers=[ConventionAnalyzer(), IOAnalyzer(fx.FIXTURES)]).run()
+    placement = {f.function.rsplit(".", 1)[-1]: f.severity
+                 for f in report.result("conventions").findings if f.rule == "placement"}
+    assert placement["impure_sum"] == "fail"
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        legacy = Runner("examples.sample_pipeline", fixtures=fx.FIXTURES).run()
+    by_name = {fr.name: fr for fr in legacy.functions}
+    assert [c.name for c in by_name["untidy"].checks][:2] == ["placement", "docstring"]
+    assert by_name["impure_sum"].status == "fail"
+    assert legacy.formulas  # math analyzer data flows through

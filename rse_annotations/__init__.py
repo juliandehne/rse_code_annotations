@@ -1,10 +1,10 @@
-"""rse_code_annotations — role annotations for generated code, with a checking runner.
+"""rse_code_annotations — role annotations for generated code, audited by pluggable analyzers.
 
 Public API::
 
     from rse_annotations import (
         functional, mapping, data_input, data_output,   # the four annotations
-        Runner, Report,                                  # the runner
+        Audit, TargetProject,                            # audit a project
     )
 
 Object model (the classes the CLI is built on)::
@@ -14,6 +14,7 @@ Object model (the classes the CLI is built on)::
         Audit, AuditReport,                 # run analyzers over a target
         Analyzer, AnalyzerCatalog,          # the plugin contract + registry
         Reviewer, VerdictStore,             # human verdicts (inspection.yaml)
+        # Runner / Report: deprecated per-function view, now built on Audit
         TextRenderer, MarkdownRenderer, JsonRenderer,
         TestGenerator, DifferentialVerifier,
     )

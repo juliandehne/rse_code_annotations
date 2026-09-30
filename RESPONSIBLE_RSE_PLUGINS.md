@@ -42,6 +42,31 @@ Tier A: cheap, static, offline, high signal and directly tied to existing hazard
 more value but needs a runtime hook, a declared attribute, or domain calibration. Tier C:
 useful for completeness/community credibility, weaker validity payoff or high false-positive risk.
 
+### Difficulty (student workload) and EVERSE anchors
+
+`difficulty` is a class attribute on every stub (default 3 in `_stub.py`): 1–5 ≈ 1–5 hours
+per week over a ~12–14-week semester to implement the check at a reasonable level *with
+tests*. The EVERSE mapping (dimensions, indicators, RSQKit tasks, gap ideas) is in
+[`EVERSE_MAPPING.md`](EVERSE_MAPPING.md).
+
+| # | Stub | EVERSE anchor | Diff. | Rationale |
+|---|---|---|---|---|
+| 1 | `LicenceComplianceAnalyzer` | [software_has_license_for_file_types](https://w3id.org/everse/i/indicators/software_has_license_for_file_types), [RSQKit licensing](https://everse.software/RSQKit/licensing_software) | 3 | REUSE/SPDX off the shelf; dependency licences + compatibility table need design |
+| 2 | `SilentFailureAnalyzer` | [has_no_linting_issues](https://w3id.org/everse/i/indicators/has_no_linting_issues) | 2 | AST on a fixed pattern list |
+| 3 | `UnjustifiedConstantAnalyzer` | [functional_correctness](https://w3id.org/everse/i/indicators/functional_correctness) | 2 | AST + comment lookup; effort in the whitelist |
+| 4 | `LLMDisclosureAnalyzer` | [RSQKit AI guidance](https://everse.software/RSQKit/ai) (adjacent) | 2 | static checks on `model_call` records + template |
+| 5 | `ResearchSecurityAnalyzer` | [static_analysis_common_vulnerabilities](https://w3id.org/everse/i/indicators/static_analysis_common_vulnerabilities), [RSQKit security](https://everse.software/RSQKit/research_software_security) | 2 | Bandit/osv-scanner detect; work is filtering |
+| 6 | `DataTermsAnalyzer` | none (EVERSE gap) | 3 | new kwargs, licence propagation, Croissant |
+| 7 | `DataLeakageAnalyzer` | [functional_correctness](https://w3id.org/everse/i/indicators/functional_correctness) | 4 | dataflow + runtime hashing mode |
+| 8 | `InferenceLedgerAnalyzer` | [functional_correctness](https://w3id.org/everse/i/indicators/functional_correctness) | 5 | runtime instrumentation of 3 libraries + recomputation |
+| 9 | `FairnessAnalyzer` | none (EVERSE "fairness" = FAIRness) | 3 | fairlearn computes; capture of predictions needs design |
+| 10 | `PurposeRetentionAnalyzer` | none | 3 | needs `personal_data` hazard; careful GDPR reading |
+| 11 | `FigureAccessibilityAnalyzer` | dim. [interaction_capability](https://w3id.org/everse/i/dimensions/interaction_capability) | 3 | savefig hook + CVD simulation + visual fixtures |
+| 12 | `ComputeFootprintAnalyzer` | [RSQKit env. sustainability](https://everse.software/RSQKit/improving_environmental_sustainability) | 2 | EcoLogits estimates; hooking + disclosure text |
+| 13 | `ArchivalSustainabilityAnalyzer` | [archived_in_software_heritage](https://w3id.org/everse/i/indicators/archived_in_software_heritage), [RSQKit archiving](https://everse.software/RSQKit/archiving_software) | 3 | several sub-checks + network mocking |
+| 14 | `InclusiveLanguageAnalyzer` | dim. [community](https://w3id.org/everse/i/dimensions/community) | 1 | rules file, `info` only |
+| 15 | `DualUseScreeningAnalyzer` | dim. [safety](https://w3id.org/everse/i/dimensions/safety) | 2 | code is small; the keyword map is the work |
+
 ## 2. Plugins
 
 ### 2.1 `LicenceComplianceAnalyzer` (static, S–M, Tier A)
@@ -55,8 +80,9 @@ judgement and per-file coverage. FAIR4RS R1.1 ("clear and accessible licence").
 **Tools.** `reuse lint` (FSFE, GPL-3.0-or-later, offline; call as subprocess to keep the
 package licence clean); `license-expression` (Apache-2.0) to parse SPDX expressions;
 `scancode-toolkit` (Apache-2.0, offline, heavy) optional for detecting licence text in
-vendored files; a small compatibility table seeded from the OSADL matrix **[licence of the
-matrix unverified]**. **Finding example.** `ERROR pyproject: MIT outbound, depends on
+vendored files; a small compatibility table seeded from the OSADL matrix (`matrix.json`,
+published with the OSADL raw data under CC-BY-4.0 — attribute OSADL when bundling it;
+https://www.osadl.org/Access-to-raw-data.oss-compliance-raw-data-access.0.html). **Finding example.** `ERROR pyproject: MIT outbound, depends on
 GPL-3.0-only 'foo' — distribution as MIT is not possible if foo is bundled`.
 
 ### 2.2 `SilentFailureAnalyzer` (static, S, Tier A)
@@ -193,9 +219,10 @@ size, and figures without an alt-text/caption entry (e.g. a `alt=` kwarg or Quar
 
 The energy component (§2.8 there) measures local energy and marks `@model_call` as "not
 measurable locally". This plugin closes that gap and produces a *disclosure*: EcoLogits
-(GenAI Impact, MPL-2.0) estimates energy, GWP and abiotic depletion per API call from
-model, token counts and latency (local computation from its bundled model data **[whether
-fully offline is unverified]**); plus a Green Algorithms-style statement (runtime × cores
+(started by GenAI Impact, now maintained under `mlco2/ecologits`, MPL-2.0) estimates energy, GWP and abiotic depletion per API call from
+model, token counts and latency — fully offline: ecologits 0.11.2 (MPL-2.0) loads its
+bundled `models.json` / `electricity_mixes.json` and imports no HTTP client; only the
+separate EcoLogits web calculator and API are online services; plus a Green Algorithms-style statement (runtime × cores
 × TDP × PUE × grid intensity, incl. embodied share) with explicit uncertainty. Output: a
 short "computational footprint" paragraph for the paper.
 
@@ -269,7 +296,7 @@ a regex can make a legal call.
 - Croissant and Croissant RAI — https://docs.mlcommons.org/croissant/docs/croissant-rai-spec.html , https://github.com/mlcommons/croissant
 - Gebru et al., *Datasheets for Datasets* https://arxiv.org/abs/1803.09010 ; Bender & Friedman, *Data Statements for NLP* https://aclanthology.org/Q18-1041/ ; Mitchell et al., *Model Cards for Model Reporting* https://arxiv.org/abs/1810.03993 ; HF model cards https://huggingface.co/docs/hub/model-cards
 - LLM reporting: Wagner et al., *Guidelines for Empirical Studies in SE involving LLMs* https://arxiv.org/abs/2508.15503 , https://llm-guidelines.org/ ; TRIPOD-LLM https://www.nature.com/articles/s41591-024-03425-5 ; reporting checklist for LLMs in behavioural science https://www.nature.com/articles/s41562-026-02492-7
-- EcoLogits — https://github.com/genai-impact/ecologits ; Green Algorithms — https://www.green-algorithms.org/
+- EcoLogits — https://github.com/mlco2/ecologits ; Green Algorithms — https://www.green-algorithms.org/
 - Colour vision: colorspacious https://github.com/njsmith/colorspacious ; DaltonLens https://github.com/DaltonLens/DaltonLens-Python ; Matplotlib colormap guidance https://matplotlib.org/stable/users/explain/colors/colormaps.html
 - Inclusive language: woke https://github.com/get-woke/woke ; alex https://github.com/get-alex/alex ; Inclusive Naming Initiative https://inclusivenaming.org/
 - GDPR (Reg. 2016/679) Art. 5, 6, 9, 30 — https://eur-lex.europa.eu/eli/reg/2016/679/oj

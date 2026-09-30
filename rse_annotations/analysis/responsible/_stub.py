@@ -7,7 +7,9 @@ reason "not implemented yet", and ``--list-analyzers`` shows it with its tier.
 How to implement one (course task)
 ----------------------------------
 1. Read the class docstring (the TODO spec) and the matching section of
-   ``RESPONSIBLE_RSE_PLUGINS.md`` (``proposal`` attribute).
+   ``RESPONSIBLE_RSE_PLUGINS.md`` (``proposal`` attribute); ``EVERSE_MAPPING.md`` lists
+   the matching EVERSE indicators, RSQKit pages and tools to reuse or cite.
+   ``difficulty`` (1-5) is the expected workload in hours per week over a semester.
 2. Change the base class from :class:`ResponsibleRSEStub` to the base that fits:
    :class:`~rse_annotations.analysis.base.StaticAnalyzer` (AST scan, never imports the
    target -- implement ``analyze_scan(report)``),
@@ -36,6 +38,11 @@ class ResponsibleRSEStub(Analyzer):
     tier: ClassVar[str] = "C"
     #: S / M / L student effort estimate.
     effort: ClassVar[str] = "S"
+    #: Expected student workload, 1-5 = roughly 1-5 hours per week over a ~12-14 week
+    #: semester, to implement the check at a reasonable level *with tests*.
+    #: 1 = a rules file / pattern list; 3 = new kwargs, a third-party tool and some design;
+    #: 5 = runtime instrumentation plus research-level validation.
+    difficulty: ClassVar[int] = 3
     #: Section of RESPONSIBLE_RSE_PLUGINS.md with the full proposal.
     proposal: ClassVar[str] = ""
     #: Annotations / hazards the analyzer hooks into.
