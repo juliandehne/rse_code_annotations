@@ -217,8 +217,10 @@ python -m rse_annotations --list               # plugins and the modes they offe
 ```
 
 `--analyze` exits non-zero when a plugin reports a `fail`, so it can gate CI. New
-plugins subclass `rse_annotations.Plugin` and register under the entry-point group
-`rse_annotations.plugins`; see `examples/plugin_template`.
+plugins subclass `rse_annotations.Plugin` and are committed to this project: one folder
+under `rse_annotations/plugins/hazards/<name>/`, added to `plugins/hazards/__init__.py`.
+`human_code_inspection` is the worked example; `_stub.py` explains how to turn a stub
+into a working plugin.
 
 Coverage is also available programmatically:
 

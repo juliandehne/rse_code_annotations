@@ -250,14 +250,9 @@ class TodoCounter(Plugin):
         return self.result([Finding("undecorated", "info", f"{n} candidates")])
 ```
 
-```toml
-[project.entry-points."rse_annotations.plugins"]
-todo_count = "my_pkg.checks:TodoCounter"
-```
-
-`python -m rse_annotations --list` shows it; `python -m rse_annotations src --analyze --only todo_count`
-runs it. The complete, test-backed exercise is `examples/plugin_template/` (a documentation-coverage
-plugin with a three-level spec and acceptance tests).
+Plugins are committed to this project: put the class in `rse_annotations/plugins/hazards/<name>/`
+and add it to the tuple in `plugins/hazards/__init__.py`. `python -m rse_annotations --list` then
+shows it; `python -m rse_annotations src --analyze --only todo_count` runs it.
 
 ## 6. Responsible-RSE stubs (course tasks)
 
@@ -292,10 +287,9 @@ Runtime hazards (`footprint`, `inference_ledger`) follow `RUNTIME_HAZARDS.md`.
 ```mermaid
 flowchart LR
     tests["tests/ (95 tests)"] --> pkg
-    tmpl["examples/plugin_template<br/>rse-doc-coverage (exercise)"] -- "entry point" --> pkg
     examples["examples/sample_pipeline.py"] --> pkg
     demo["scripts/demo_lni_testbed.py"] -- "python -m rse_annotations" --> pkg
     lni["lni_study<br/>branch feat/rse-code-annotations"] -- "pip install -e" --> pkg
-    students["Responsible-RSE course<br/>(implements stubs)"] -- "entry points / PRs" --> pkg
+    students["Responsible-RSE course<br/>(implements stubs)"] -- "PRs" --> pkg
     pkg(["rse_annotations"])
 ```

@@ -42,7 +42,7 @@ The old modules stay as the engine and keep their public API (tests, examples an
 - [x] `tests/test_object_model.py` (26 tests); 83 tests pass in total
 - [x] update `ARCHITECTURE.md` and republish the architecture page
 - [x] `runner.Runner` retired as a deprecated shim over `Audit` (`TargetProject.from_modules`, `Report.from_audit`); 84 tests pass (2026-09-30)
-- [x] `examples/plugin_template/`: documentation-coverage exercise (skeleton + 3-level spec + acceptance tests), for the user to solve themselves as the API accessibility test (2026-09-30)
+- [x] `examples/plugin_template/`: documentation-coverage exercise (skeleton + 3-level spec + acceptance tests), for the user to solve themselves as the API accessibility test (2026-09-30); removed again the same day: plugins are committed to the main project under `plugins/hazards/<name>/`, not shipped as separate packages
 - [ ] later, optional: move engine code (`checks`, `coverage`, `stubs`) into the classes. Not needed: they are public API used by tests, examples and lni_study
 
 ## Open todos

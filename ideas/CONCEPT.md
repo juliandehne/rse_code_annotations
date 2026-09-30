@@ -196,8 +196,7 @@ rse_code_annotations/
 │   └── plugins/hazards/<name>/   # one folder per plugin; human_code_inspection is
 │                                 #   the worked example (incl. its automatic checks.py)
 ├── examples/
-│   ├── sample_pipeline.py        # one function per review concern, correct + incorrect
-│   └── plugin_template/          # starting point for a new plugin
+│   └── sample_pipeline.py        # one function per review concern, correct + incorrect
 └── tests/
 ```
 
