@@ -54,6 +54,7 @@ someone else can see that it was done.
 ```bash
 pip install -e .            # core, no dependencies — the annotations work immediately
 pip install -e ".[formula]" # + SymPy/latexify for richer formula inference
+pip install -r requirements.txt  # everything: package, formula extras, pytest
 ```
 
 The base install has **no dependencies**: after `pip install` you can import and
