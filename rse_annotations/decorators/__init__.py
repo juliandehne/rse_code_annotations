@@ -5,10 +5,10 @@ This is what *producers* of research code use: they mark what a function is
 plugins know where to look. Discovery imports the target to collect the marks.
 """
 
-from .markers import CONCERN_HELP, REVIEW_CONCERNS, HazardDecorator, decorator_of, data_input, data_output, functional, mapping
+from . import markers
+from .markers import *  # noqa: F401,F403 -- every decorator plus the derived tables (markers.__all__)
 from .discovery import discover, discover_many, discover_path
 from .registry import REGISTRY, DecoratorInfo, Registry
 
-__all__ = ["functional", "mapping", "data_input", "data_output", "decorator_of",
-           "HazardDecorator", "REVIEW_CONCERNS", "CONCERN_HELP", "REGISTRY", "Registry", "DecoratorInfo",
+__all__ = [*markers.__all__, "REGISTRY", "Registry", "DecoratorInfo",
            "discover", "discover_many", "discover_path"]

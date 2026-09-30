@@ -13,6 +13,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
+from rse_annotations import REVIEW_CONCERNS  # noqa: E402
 from rse_annotations.reporting import render_coverage_markdown, render_coverage_text  # noqa: E402
 from rse_annotations.scan import HAZARD_PARENT, HAZARDS, scan_path  # noqa: E402
 
@@ -86,9 +87,9 @@ def test_scan_finds_existing_decorators_without_importing(tmp_path):
     assert by_name["area"].concern == "functional"        # aliased import (functional as pure)
     assert by_name["load"].concern == "data_input"        # called form with fields=
     assert by_name["dump"].concern == "data_output"       # qualified @rse_annotations.data_output
-    assert report.counts_by_kind() == {
-        "functional": 1, "mapping": 0, "data_input": 1, "data_output": 1,
-    }
+    expected = {c.value: 0 for c in REVIEW_CONCERNS}
+    expected.update(functional=1, data_input=1, data_output=1)
+    assert report.counts_by_kind() == expected
 
 
 def test_scan_works_on_a_module_that_cannot_be_imported(tmp_path):
@@ -281,7 +282,7 @@ def test_the_hazard_axis_specialises_the_dataflow_one(tmp_path):
 
 
 def test_every_decorator_has_a_concern_and_back():
-    """``HazardDecorator`` and ``DECORATORS`` must list the same names -- adding one needs both."""
+    """``HazardDecorator`` is derived from ``DECORATORS``, so a new decorator is one function."""
     from rse_annotations.decorators.markers import DECORATORS, HazardDecorator
     assert {d.__name__ for d in DECORATORS} == {c.value for c in HazardDecorator}
     assert f"@{HazardDecorator.DATA_INPUT}" == "@data_input"      # prints as text, not HazardDecorator.X
@@ -661,3 +662,5 @@ def test_a_clean_codebase_reports_no_hazards(tmp_path):
     report = scan_path(tmp_path)
     assert report.hazardous == [] and report.hazard_rate == 0.0
     assert "Audit hazards" not in render_coverage_text(report)
+
+

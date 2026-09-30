@@ -93,8 +93,8 @@ def load_csv(path):
 
 In code, the decorator names are also the members of the `HazardDecorator` enum
 (`HazardDecorator.FUNCTIONAL == "functional"`). A new decorator is one function in
-`rse_annotations/decorators/markers.py`, one entry in `DECORATORS` and one enum member;
-a test fails if the two lists drift apart.
+`rse_annotations/decorators/markers.py`, marked `@_concern`; the enum member, the help text
+and the exports are derived from it.
 
 ## The tool
 

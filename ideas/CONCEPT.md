@@ -176,7 +176,7 @@ rse_code_annotations/
 │   ├── __main__.py / cli.py      # `python -m rse_annotations <path>` (mode menu)
 │   ├── legacy.py                 # deprecated Runner/Report, kept for old callers
 │   ├── decorators/               # the marks themselves
-│   │   ├── markers.py            # the decorators, DECORATORS, HazardDecorator enum
+│   │   ├── markers.py            # the decorators; DECORATORS + HazardDecorator derived
 │   │   ├── registry.py           # DecoratorInfo, REGISTRY
 │   │   └── discovery.py          # import by dotted name or by walking a path
 │   ├── core/                     # object model: TargetProject, Plugin, Audit, findings

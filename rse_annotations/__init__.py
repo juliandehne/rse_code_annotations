@@ -25,8 +25,8 @@ Public API::
 
 from __future__ import annotations
 
-from .decorators import (CONCERN_HELP, REVIEW_CONCERNS, HazardDecorator, REGISTRY, DecoratorInfo, Registry, decorator_of,
-                          data_input, data_output, functional, mapping)
+from . import decorators
+from .decorators import *  # noqa: F401,F403 -- every decorator and its tables (decorators.__all__)
 from .core import (ENTRY_POINT_GROUP, MODE_LABELS, MODES, PHASES, SEVERITIES, AnalysisResult,
                    Audit, AuditReport, Finding, Plugin, PluginCatalog, TargetProject,
                    default_catalog)
@@ -43,9 +43,8 @@ from .testing import (DiffResult, DifferentialVerifier, StubFile, TestGenerator,
                       differential_check, generate_stub_files)
 
 __all__ = [
-    # decorators
-    "functional", "mapping", "data_input", "data_output", "decorator_of",
-    "REGISTRY", "Registry", "DecoratorInfo", "HazardDecorator", "REVIEW_CONCERNS", "CONCERN_HELP",
+    # decorators: whatever rse_annotations.decorators exports
+    *decorators.__all__,
     # core
     "TargetProject", "Plugin", "PHASES", "MODES", "MODE_LABELS",
     "Finding", "AnalysisResult", "SEVERITIES",

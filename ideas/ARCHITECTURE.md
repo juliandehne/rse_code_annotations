@@ -101,6 +101,7 @@ classDiagram
         MAPPING
         DATA_INPUT
         DATA_OUTPUT
+        HARDWARE_DEPENDENCY
     }
     class HazardKind {
         <<frozen dataclass>>
@@ -121,8 +122,8 @@ classDiagram
 ```
 
 - **`HazardDecorator`** (`decorators/markers.py`) is a `str`-Enum, so `"functional"` is written
-  once; text only appears at the edges (AST names, YAML, JSON). A test keeps it in sync with
-  `DECORATORS`, the list of decorator functions.
+  once; text only appears at the edges (AST names, YAML, JSON). It is derived from
+  `DECORATORS`, the decorator functions registered with `@_concern`: new decorator = one function.
 - **`HazardKind`** (`scan/hazards.py`) bundles one hazard: its name, help text, flags and its
   detector function (Strategy pattern). `HAZARD_KINDS` is the single source; `HAZARDS`,
   `HAZARD_PARENT`, `HAZARD_HELP`, `CRITICAL_HAZARDS` are derived from it. New hazard = one
