@@ -30,7 +30,7 @@ import sys
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
-from .annotations.registry import KINDS
+from .decorators.markers import REVIEW_CONCERNS
 from .core.audit import Audit
 from .core.catalog import PluginCatalog, default_catalog
 from .core.plugin import MODE_LABELS, MODES, Plugin
@@ -65,12 +65,12 @@ def _target(spec: str, output_fn: OutputFn) -> Optional[TargetProject]:
 
 
 def _header(target: TargetProject, output_fn: OutputFn) -> int:
-    """Print what the static scan found (no import); return the annotation count."""
+    """Print what the static scan found (no import); return the decorator count."""
     counts = target.static_scan().counts_by_kind()
     total = sum(counts.values())
-    parts = [f"{counts[k]} @{k}" for k in KINDS if counts.get(k)]
+    parts = [f"{counts[k]} @{k}" for k in REVIEW_CONCERNS if counts.get(k)]
     output_fn(f"Scanned {target.root}")
-    output_fn(f"Found {total} annotation(s): {', '.join(parts) if parts else 'none'}")
+    output_fn(f"Found {total} decorated function(s): {', '.join(parts) if parts else 'none'}")
     return total
 
 
@@ -164,7 +164,7 @@ def main(argv: Optional[list] = None, *, input_fn: InputFn = input,
     mode.add_argument("--list", "--list-plugins", dest="list", action="store_true",
                       help="list the plugins and the modes they offer, then exit")
     mode.add_argument("--coverage", action="store_true",
-                      help="static annotation coverage + candidates (-> annotation_coverage.md)")
+                      help="static decorator coverage + candidates (-> decorator_coverage.md)")
     parser.add_argument("--plugin", default=None,
                         help="the plugin to use for --inspect / --tests")
     parser.add_argument("--only", default=None,
@@ -186,7 +186,7 @@ def main(argv: Optional[list] = None, *, input_fn: InputFn = input,
     chosen = _mode_from_args(args)
     if chosen is None:
         if not _header(target, output_fn):
-            output_fn("No annotations yet. Here is where they would go "
+            output_fn("No decorators yet. Here is where they would go "
                       "(coverage scan of the same tree):")
             return write_coverage_report(target, output_fn)
         options = [(m, f"{MODE_LABELS[m]:<17} -- {_MODE_HINTS[m]}")
@@ -247,7 +247,7 @@ def plugin_main(plugin_factory: Callable[[], Plugin], argv: Optional[list] = Non
         extra_actions: ``{flag: (menu label, fn(plugin, target, output_fn) -> int)}``;
             each becomes a ``--flag`` and a menu entry.
         before_menu: Called before the menu is shown; a non-None return ends the run
-            with that exit code (e.g. "nothing annotated yet").
+            with that exit code (e.g. "nothing decorated yet").
     """
     plugin = plugin_factory()
     extra_actions = dict(extra_actions or {})

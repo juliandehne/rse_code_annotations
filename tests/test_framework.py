@@ -16,13 +16,13 @@ if ROOT not in sys.path:
 from rse_annotations import (  # noqa: E402
     REGISTRY,
     Runner,
-    annotation_of,
+    decorator_of,
     data_input,
     data_output,
     functional,
     mapping,
 )
-from rse_annotations.inspection import checks  # noqa: E402
+from rse_annotations.plugins.hazards.human_code_inspection import checks  # noqa: E402
 from rse_annotations.inspection.snippets import extract_snippet  # noqa: E402
 
 
@@ -33,10 +33,22 @@ def test_decorator_preserves_behaviour_and_metadata():
         return a + b
 
     assert add(2, 3) == 5
-    info = annotation_of(add)
+    info = decorator_of(add)
     assert info is not None
-    assert info.kind == "functional"
+    assert info.concern == "functional"
     assert info.name == "add"
+
+
+def test_decorator_with_fields_records_them():
+    @data_input(fields={"path": "file to read"})
+    def rd(path):
+        "read. :param path:"
+        return path
+
+    assert rd("x") == "x"
+    info = decorator_of(rd)
+    assert info.concern == "data_input"
+    assert info.fields == {"path": "file to read"}
 
 
 def test_functional_purity_placement_fails_on_io():
@@ -46,7 +58,7 @@ def test_functional_purity_placement_fails_on_io():
         with open(path) as fh:
             return fh.read()
 
-    result = checks.check_placement(annotation_of(bad))
+    result = checks.check_placement(decorator_of(bad))
     assert result.status == "fail"
 
 
@@ -57,7 +69,7 @@ def test_data_input_placement_passes_with_read():
         with open(path) as fh:
             return fh.read()
 
-    assert checks.check_placement(annotation_of(rd)).status == "pass"
+    assert checks.check_placement(decorator_of(rd)).status == "pass"
 
 
 def test_docstring_check_requires_fields():
@@ -66,7 +78,7 @@ def test_docstring_check_requires_fields():
         "Only documents x here."  # missing 'y'
         return x
 
-    res = checks.check_docstring(annotation_of(transform))
+    res = checks.check_docstring(decorator_of(transform))
     assert res.status == "fail"
     assert "y" in res.message
 
@@ -86,7 +98,7 @@ def test_io_success_check_observes_write(tmp_path):
         tracer.writes.clear()
         return (path,), {}
 
-    res = checks.check_io_success(annotation_of(rd), fixture=fixture)
+    res = checks.check_io_success(decorator_of(rd), fixture=fixture)
     assert res.status == "pass", res.message
 
 
@@ -96,7 +108,7 @@ def test_extract_snippet_contains_source():
         "square. :param x: :returns: x*x."
         return x * x
 
-    snip = extract_snippet(annotation_of(sq))
+    snip = extract_snippet(decorator_of(sq))
     assert "return x * x" in snip.source
     assert snip.name == "sq"
 
@@ -110,7 +122,7 @@ def test_runner_end_to_end_on_example():
     by_name = {fr.name: fr for fr in report.functions}
     # good functional passes placement
     assert by_name["normalize"].status == "pass"
-    # mis-annotated functional fails
+    # mis-decorated functional fails
     assert by_name["impure_sum"].status == "fail"
     # undocumented mapping fails docstring
     assert by_name["untidy"].status == "fail"
@@ -127,7 +139,7 @@ def test_formula_inference_ast_and_sympy():
         "affine rescale"
         return lo + x * (hi - lo)
 
-    res = infer_formula(annotation_of(rescale))
+    res = infer_formula(decorator_of(rescale))
     assert res.ast_forms, "AST backend should always render a return expression"
     assert "lo" in res.ast_forms[0] and "hi" in res.ast_forms[0]
     # sympy is a dev dependency; if present it should simplify to a closed form.
@@ -146,7 +158,7 @@ def test_formula_inference_handles_non_arithmetic_gracefully():
         "not scalar arithmetic"
         return [x for x in items if x]
 
-    res = infer_formula(annotation_of(pick))
+    res = infer_formula(decorator_of(pick))
     # Must not raise; sympy simply reports it does not apply.
     assert isinstance(res.notes, list)
 
@@ -254,12 +266,12 @@ def _write_sample(tmp_path, stem):
 
 
 def test_discover_path_finds_all_kinds(tmp_path):
-    from rse_annotations.annotations.discovery import discover_path
+    from rse_annotations.decorators.discovery import discover_path
 
     _write_sample(tmp_path, "pkg_discover")
     infos = discover_path(tmp_path)
-    by_kind = {i.kind for i in infos}
-    assert {"functional", "mapping", "data_input", "data_output"} <= by_kind
+    by_concern = {i.concern for i in infos}
+    assert {"functional", "mapping", "data_input", "data_output"} <= by_concern
     names = {i.name for i in infos}
     assert {"area", "tidy", "load", "store"} <= names
 
@@ -269,7 +281,7 @@ def test_discover_path_finds_all_kinds(tmp_path):
 # --------------------------------------------------------------------------- #
 
 def test_generate_stub_files_covers_every_kind(tmp_path):
-    from rse_annotations.annotations.discovery import discover_path
+    from rse_annotations.decorators.discovery import discover_path
     from rse_annotations.testing.stubs import generate_stub_files
 
     _write_sample(tmp_path, "pkg_stub")
@@ -277,7 +289,7 @@ def test_generate_stub_files_covers_every_kind(tmp_path):
     files = generate_stub_files(infos, tmp_path / "tests")
     assert files
     blob = "\n".join(sf.content for sf in files)
-    # one test per annotation, each a skipped scaffold
+    # one test per decorator, each a skipped scaffold
     assert "def test_area_is_deterministic" in blob
     assert "def test_tidy_transforms_shape" in blob
     assert "def test_load_reads_source(tmp_path)" in blob
@@ -290,20 +302,18 @@ def test_generate_stub_files_covers_every_kind(tmp_path):
 # Interactive inspection
 # --------------------------------------------------------------------------- #
 
-def test_run_inspection_records_and_roundtrips(tmp_path):
-    from rse_annotations.annotations.discovery import discover_path
-    from rse_annotations.inspection.verdicts import load_yaml, run_inspection
+def test_reviewer_records_and_roundtrips(tmp_path):
+    from rse_annotations.decorators.discovery import discover_path
+    from rse_annotations.inspection import Reviewer, VerdictStore, load_yaml
 
     _write_sample(tmp_path, "pkg_inspect")
     infos = discover_path(tmp_path)
     answers = iter(["y"])  # single @functional (area) -> accept
 
     out = tmp_path / "inspection.yaml"
-    verdicts = run_inspection(
-        infos, out,
-        input_fn=lambda _prompt: next(answers),
-        output_fn=lambda _msg: None,
-    )
+    reviewer = Reviewer(VerdictStore(out), input_fn=lambda _prompt: next(answers),
+                        output_fn=lambda _msg: None)
+    verdicts = reviewer.review(infos)
     assert [v.verdict for v in verdicts] == ["accepted"]
     assert out.exists()
     reloaded = load_yaml(out)
@@ -311,18 +321,16 @@ def test_run_inspection_records_and_roundtrips(tmp_path):
     assert reloaded[0].verdict == "accepted"
 
 
-def test_run_inspection_default_on_empty_answer(tmp_path):
-    from rse_annotations.annotations.discovery import discover_path
-    from rse_annotations.inspection import run_inspection
+def test_reviewer_default_on_empty_answer(tmp_path):
+    from rse_annotations.decorators.discovery import discover_path
+    from rse_annotations.inspection import Reviewer, VerdictStore
 
     _write_sample(tmp_path, "pkg_inspect_default")
     infos = discover_path(tmp_path)
     out = tmp_path / "inspection.yaml"
-    verdicts = run_inspection(
-        infos, out,
-        input_fn=lambda _prompt: "",       # accept the default -> pending
-        output_fn=lambda _msg: None,
-    )
+    reviewer = Reviewer(VerdictStore(out), input_fn=lambda _prompt: "",  # default -> pending
+                        output_fn=lambda _msg: None)
+    verdicts = reviewer.review(infos)
     assert verdicts[0].verdict == "pending"
 
 
@@ -378,4 +386,4 @@ def test_cli_reports_empty_directory(tmp_path):
     msgs = []
     rc = main([str(tmp_path)], output_fn=msgs.append)
     assert rc == 0
-    assert any("0 annotation" in m for m in msgs)
+    assert any("0 decorated function" in m for m in msgs)

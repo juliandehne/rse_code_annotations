@@ -17,9 +17,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Iterable, List, Optional
 
-from .catalog import PluginCatalog, default_catalog
+from .catalog import PluginCatalog, default_catalog, filter_plugins
 from .findings import AnalysisResult, Finding
 from .plugin import Plugin
+from .target import TargetProject
 
 
 @dataclass
@@ -54,7 +55,7 @@ class Audit:
             catalog's default instances.
     """
 
-    def __init__(self, target, *, catalog: Optional[PluginCatalog] = None,
+    def __init__(self, target: TargetProject, *, catalog: Optional[PluginCatalog] = None,
                  plugins: Optional[List[Plugin]] = None) -> None:
         self.target = target
         self.catalog = catalog if catalog is not None else default_catalog()
@@ -66,16 +67,9 @@ class Audit:
         """The plugin instances to use, filtered by name, phase and mode."""
         if self.plugins is None:
             return self.catalog.create(only, when=when, mode=mode)
-        chosen = list(self.plugins)
-        if only:
-            wanted = set(only)
-            chosen = [p for p in chosen if p.name in wanted]
-        if when is not None:
-            phases = set(when)
-            chosen = [p for p in chosen if p.when in phases]
-        if mode is not None:
-            chosen = [p for p in chosen if p.supports(mode)]
-        return chosen
+        wanted = set(only or ())
+        chosen = [p for p in self.plugins if not wanted or p.name in wanted]
+        return filter_plugins(chosen, when=when, mode=mode)
 
     def plugin(self, name: str) -> Plugin:
         """One plugin instance by name (a configured one if given, else a default one)."""
@@ -101,14 +95,3 @@ class Audit:
         except Exception as exc:  # noqa: BLE001 - one broken plugin must not stop the audit
             return plugin.result([Finding("plugin_error", "fail",
                                           f"{type(exc).__name__}: {exc}")])
-
-    # ---- shared machinery, for callers that drive it directly ----------- #
-    def reviewer(self, **io):
-        """A :class:`~rse_annotations.inspection.Reviewer` writing this target's ``inspection.yaml``."""
-        from ..inspection import Reviewer, VerdictStore
-        return Reviewer(VerdictStore.for_target(self.target), **io)
-
-    def test_generator(self, out_dir=None):
-        """A :class:`~rse_annotations.testing.TestGenerator` for this target."""
-        from ..testing import TestGenerator
-        return TestGenerator(self.target, out_dir)

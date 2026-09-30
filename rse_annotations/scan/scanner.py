@@ -1,12 +1,12 @@
-"""Static (AST) annotation coverage: what is annotated, and what should be.
+"""Static (AST) decorator coverage: what is decorated, and what should be.
 
 The inspection plugin works by *reflection*: the decorators
 register themselves at import time, so it can only ever see functions that are
-**already annotated**, in modules that **import cleanly**. Coverage is the opposite
-question -- *which functions are missing an annotation?* -- so it cannot use the
+**already decorated**, in modules that **import cleanly**. Coverage is the opposite
+question -- *which functions are missing a decorator?* -- so it cannot use the
 registry at all:
 
-* an unannotated function never enters the registry, by construction; and
+* an undecorated function never enters the registry, by construction; and
 * research code frequently refuses to import (a missing optional dependency, a
   module that calls ``sys.exit()`` at the bottom, an API key read at import time).
 
@@ -14,14 +14,14 @@ So this module never imports the target. It parses every ``*.py`` file under the
 root with :mod:`ast`, walks the module/class/function structure, and reports:
 
 1. **coverage** -- every function and method found, whether it carries one of the
-   four annotations, aggregated per kind and per file; and
-2. **candidates** -- for each *unannotated* function, the annotation it most likely
+   decorators, aggregated per concern and per file; and
+2. **candidates** -- for each *undecorated* function, the decorator it most likely
    deserves, inferred from the same syntactic heuristics the placement checks use
    (:mod:`rse_annotations.scan.ast_utils`): a file write implies ``@data_output``, a file
    read implies ``@data_input``, pure arithmetic implies ``@functional``, and an
    argument-in/value-out transform implies ``@mapping``; and
 3. **audit hazards** -- a second, *orthogonal* axis (see ``PROPOSED_ANNOTATIONS.md``).
-   The four annotations answer *where does data flow?*. They cannot express *"this
+   The dataflow decorators answer *where does data flow?*. They cannot express *"this
    answer came from a language model"*, *"this result depends on an RNG"* or *"this
    decides who is in the sample"* -- which is what a reviewer actually attacks. So a
    function has one dataflow role and, independently, zero or more hazards
@@ -39,17 +39,13 @@ import ast
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from ..annotations.discovery import _iter_python_files, _module_name_for
-from .ast_utils import (_alias_map, _annotation_kind, _called_names, _file_io_calls,
+from ..decorators.discovery import _iter_python_files, _module_name_for
+from .ast_utils import (_alias_map, _decorator_concern, _called_names, _file_io_calls,
                         _param_names, _returns_a_value)
+from . import vocabulary as vocab
 from .candidates import _suggest
 from .hazards import _flag_uncalled_validations, _hazards, _propagate_hazards
 from .model import CoverageReport, FunctionRecord
-
-#: Files we never count: test modules and pytest bootstrap.
-_SKIP_FILE_PREFIXES = ("test_",)
-_SKIP_FILE_NAMES = {"conftest.py", "setup.py"}
-
 
 # --------------------------------------------------------------------------- #
 # The scan
@@ -76,13 +72,13 @@ def _visit_body(body, *, module: str, file: str, aliases, records: List[Function
                         prefix=f"{prefix}{node.name}.")
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             eligible, skip_reason = _eligibility(node.name, class_name, depth)
-            kind = _annotation_kind(node, aliases)
-            if kind is None and eligible:
+            concern = _decorator_concern(node, aliases)
+            if concern is None and eligible:
                 suggested, reason, confidence = _suggest(node)
             else:
                 suggested, reason, confidence = None, "", ""
             # Hazards are orthogonal to the dataflow role, so they are computed for
-            # *annotated* functions too -- `compute_dimension_icr` is a @mapping and a
+            # *decorated* functions too -- `compute_dimension_icr` is a @mapping and a
             # statistical hazard at the same time.
             if eligible:
                 reads, writes = _file_io_calls(node)
@@ -97,7 +93,7 @@ def _visit_body(body, *, module: str, file: str, aliases, records: List[Function
                 module=module,
                 file=file,
                 lineno=node.lineno,
-                kind=kind,
+                concern=concern,
                 suggested=suggested,
                 reason=reason,
                 confidence=confidence,
@@ -115,12 +111,12 @@ def _visit_body(body, *, module: str, file: str, aliases, records: List[Function
 
 
 def _skip_file(path: Path) -> bool:
-    return (path.name in _SKIP_FILE_NAMES
-            or path.name.startswith(_SKIP_FILE_PREFIXES))
+    return (path.name in vocab.SKIP_FILE_NAMES
+            or path.name.startswith(vocab.SKIP_FILE_PREFIXES))
 
 
 def scan_path(root) -> CoverageReport:
-    """Statically scan ``root`` and report annotation coverage plus candidates.
+    """Statically scan ``root`` and report decorator coverage plus candidates.
 
     Nothing is imported and nothing is executed -- the tree is parsed with
     :mod:`ast` only, so this works on code that cannot be imported at all.

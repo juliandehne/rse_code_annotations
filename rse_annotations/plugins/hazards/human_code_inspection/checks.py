@@ -1,14 +1,14 @@
-"""Validation checks used by the runner.
+"""Automatic checks of the ``human_code_inspection`` plugin (no human involved).
 
 Three families of check:
 
-* **placement** — AST inspection that the annotation is applied to the right kind
+* **placement** — AST inspection that the decorator is applied to the right kind
   of object and that the body matches the promised role (purity for ``@functional``;
-  a real read/write for the boundary annotations);
+  a real read/write for the boundary decorators);
 * **docstring** — the function has a docstring and documents its declared fields;
 * **io_success** — running a boundary function actually reads / writes a file.
 
-Every check returns a :class:`CheckResult` so the runner can aggregate them.
+Every check returns a :class:`CheckResult`; the plugin turns it into a finding.
 """
 
 from __future__ import annotations
@@ -21,12 +21,13 @@ import tempfile
 from dataclasses import dataclass
 from typing import List, Optional
 
-from ..annotations.registry import AnnotationInfo
-from ..scan.ast_utils import (_READ_CALLS, _WRITE_CALLS, _called_names, _is_read_name,
-                              _is_write_name)
+from ....decorators.registry import DecoratorInfo
+from ....scan import vocabulary as vocab
+from ....scan.ast_utils import _called_names, _is_read_name, _is_write_name
+from ....decorators.markers import HazardDecorator
 
 # Calls that hint at I/O inside a supposedly pure body.
-_IO_HINT_CALLS = _READ_CALLS | _WRITE_CALLS | {"print"}
+_IO_HINT_CALLS = vocab.READ_CALLS | vocab.WRITE_CALLS | {"print"}
 
 
 @dataclass
@@ -52,8 +53,8 @@ class CheckResult:
 # AST helpers
 # --------------------------------------------------------------------------- #
 
-def _get_func_ast(info: AnnotationInfo) -> Optional[ast.AST]:
-    """Return the ``FunctionDef`` node for an annotated function, if source is available."""
+def _get_func_ast(info: DecoratorInfo) -> Optional[ast.AST]:
+    """Return the ``FunctionDef`` node for a decorated function, if source is available."""
     try:
         src = inspect.getsource(info.func)
     except (OSError, TypeError):
@@ -78,8 +79,8 @@ def _dedent(src: str) -> str:
 # 1. Placement checks
 # --------------------------------------------------------------------------- #
 
-def check_placement(info: AnnotationInfo) -> CheckResult:
-    """Verify the annotation is applied sensibly for its ``kind``."""
+def check_placement(info: DecoratorInfo) -> CheckResult:
+    """Verify the decorator is applied sensibly for its ``concern``."""
     node = _get_func_ast(info)
     if node is None:
         return CheckResult("placement", "warn",
@@ -87,7 +88,7 @@ def check_placement(info: AnnotationInfo) -> CheckResult:
 
     called = _called_names(node)
 
-    if info.kind == "functional":
+    if info.concern == HazardDecorator.FUNCTIONAL:
         offenders = sorted(
             n for n in called
             if n in _IO_HINT_CALLS or _is_read_name(n) or _is_write_name(n))
@@ -97,13 +98,13 @@ def check_placement(info: AnnotationInfo) -> CheckResult:
                 f"@functional should be pure but calls I/O-like functions: {offenders}")
         return CheckResult("placement", "pass", "no I/O detected; looks pure")
 
-    if info.kind == "data_input":
+    if info.concern == HazardDecorator.DATA_INPUT:
         if any(_is_read_name(n) for n in called):
             return CheckResult("placement", "pass", "contains a read call")
         return CheckResult("placement", "warn",
                            "no obvious read call found in @data_input body")
 
-    if info.kind == "data_output":
+    if info.concern == HazardDecorator.DATA_OUTPUT:
         if any(_is_write_name(n) for n in called):
             return CheckResult("placement", "pass", "contains a write call")
         return CheckResult("placement", "warn",
@@ -117,7 +118,7 @@ def check_placement(info: AnnotationInfo) -> CheckResult:
 # 2. Docstring / field documentation checks
 # --------------------------------------------------------------------------- #
 
-def check_docstring(info: AnnotationInfo) -> CheckResult:
+def check_docstring(info: DecoratorInfo) -> CheckResult:
     """Require a docstring, and that every declared field is mentioned in it."""
     doc = inspect.getdoc(info.func)
     if not doc or not doc.strip():
@@ -137,7 +138,7 @@ def check_docstring(info: AnnotationInfo) -> CheckResult:
 
 
 # --------------------------------------------------------------------------- #
-# 3. I/O-success checks for boundary annotations
+# 3. I/O-success checks for boundary decorators
 # --------------------------------------------------------------------------- #
 
 class _OpenTracer:
@@ -166,11 +167,11 @@ class _OpenTracer:
         builtins.open = self._orig
 
 
-def check_io_success(info: AnnotationInfo, *, fixture=None) -> CheckResult:
+def check_io_success(info: DecoratorInfo, *, fixture=None) -> CheckResult:
     """Run a boundary function in a sandbox and confirm it read / wrote a file.
 
     Args:
-        info: The annotated function (must be ``data_input`` or ``data_output``).
+        info: The decorated function (must be ``data_input`` or ``data_output``).
         fixture: Optional callable ``fixture(tmpdir, tracer) -> (args, kwargs)`` that
             prepares inputs (e.g. writes a sample file) and returns call arguments.
             If omitted, the check is reported as ``warn`` (cannot invoke safely).
@@ -178,7 +179,7 @@ def check_io_success(info: AnnotationInfo, *, fixture=None) -> CheckResult:
     Returns:
         A :class:`CheckResult`; ``pass`` only if a matching read/write was observed.
     """
-    if info.kind not in ("data_input", "data_output"):
+    if info.concern not in (HazardDecorator.DATA_INPUT, HazardDecorator.DATA_OUTPUT):
         return CheckResult("io_success", "pass", "not a boundary function")
 
     if fixture is None:
@@ -186,7 +187,7 @@ def check_io_success(info: AnnotationInfo, *, fixture=None) -> CheckResult:
             "io_success", "warn",
             "no fixture supplied; cannot exercise I/O (provide one to enable this check)")
 
-    want_read = info.kind == "data_input"
+    want_read = info.concern == HazardDecorator.DATA_INPUT
     with tempfile.TemporaryDirectory() as tmp:
         with _OpenTracer() as tracer:
             try:
@@ -202,14 +203,5 @@ def check_io_success(info: AnnotationInfo, *, fixture=None) -> CheckResult:
             return CheckResult("io_success", "pass",
                                f"{verb} {len(observed)} file(s): {observed}")
         return CheckResult("io_success", "fail",
-                           f"@{info.kind} did not {verb} any file when invoked")
+                           f"@{info.concern} did not {verb} any file when invoked")
 
-
-def all_checks(info: AnnotationInfo, *, fixture=None) -> List[CheckResult]:
-    """Run every check appropriate for ``info``'s kind."""
-    results = [check_placement(info)]
-    if info.kind != "functional":
-        results.append(check_docstring(info))
-    if info.kind in ("data_input", "data_output"):
-        results.append(check_io_success(info, fixture=fixture))
-    return results

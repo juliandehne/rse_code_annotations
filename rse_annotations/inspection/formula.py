@@ -42,7 +42,7 @@ import inspect
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-from ..annotations.registry import AnnotationInfo
+from ..decorators.registry import DecoratorInfo
 
 
 @dataclass
@@ -107,7 +107,7 @@ def _render(node: ast.AST) -> str:
         return "<expr>"
 
 
-def _ast_formulas(info: AnnotationInfo) -> List[str]:
+def _ast_formulas(info: DecoratorInfo) -> List[str]:
     try:
         import textwrap
         src = textwrap.dedent(inspect.getsource(info.func))
@@ -129,7 +129,7 @@ def _ast_formulas(info: AnnotationInfo) -> List[str]:
 # Backend 2: SymPy symbolic execution
 # --------------------------------------------------------------------------- #
 
-def _sympy_formula(info: AnnotationInfo) -> tuple[Optional[str], Optional[str], Optional[str]]:
+def _sympy_formula(info: DecoratorInfo) -> tuple[Optional[str], Optional[str], Optional[str]]:
     """Return (pretty, latex, note). Only works for scalar-arithmetic functions."""
     try:
         import sympy
@@ -160,7 +160,7 @@ def _sympy_formula(info: AnnotationInfo) -> tuple[Optional[str], Optional[str], 
 # Backend 3: latexify
 # --------------------------------------------------------------------------- #
 
-def _latexify_formula(info: AnnotationInfo) -> tuple[Optional[str], Optional[str]]:
+def _latexify_formula(info: DecoratorInfo) -> tuple[Optional[str], Optional[str]]:
     try:
         import latexify
     except ImportError:
@@ -175,7 +175,7 @@ def _latexify_formula(info: AnnotationInfo) -> tuple[Optional[str], Optional[str
 # Orchestration
 # --------------------------------------------------------------------------- #
 
-def infer_formula(info: AnnotationInfo) -> FormulaResult:
+def infer_formula(info: DecoratorInfo) -> FormulaResult:
     """Run every applicable backend and collect the inferred formulas."""
     res = FormulaResult(name=info.name, location=info.location)
 

@@ -1,4 +1,4 @@
-# Proposed annotations — beyond the dataflow four
+# Proposed decorators — beyond dataflow
 
 *Recommendations grounded in the first real coverage run (`lni_study`, 29 modules,
 267 functions). See [`CONCEPT.md`](CONCEPT.md) §5 for the coverage tool that produced
@@ -8,9 +8,9 @@ the evidence, and §7 for the hazard scan that now detects everything proposed h
 
 ## 1. What the testbed run revealed
 
-Running the coverage scan on `lni_study` gave a defensible number (2% annotated, 210
-candidates) — but the *interesting* finding is not the coverage. It is **what the four
-annotations said about the three most important functions in the study**:
+Running the coverage scan on `lni_study` gave a defensible number (2% decorated, 210
+candidates) — but the *interesting* finding is not the coverage. It is **what the dataflow
+decorators said about the three most important functions in the study**:
 
 | Function | What it actually does | Current suggestion |
 | --- | --- | --- |
@@ -28,7 +28,7 @@ them. `@mapping` collected **113 of the 210 candidates (54%)** because it is not
 category at all; it is the *residual* — everything that isn't a file boundary and isn't
 pure arithmetic.
 
-The blind spot has a shape. The four annotations answer **"where does data flow?"**
+The blind spot has a shape. The dataflow decorators answer **"where does data flow?"**
 Auditing AI-generated research software needs a second, *orthogonal* question:
 
 > **Where can the result be wrong, and can I reproduce it?**
@@ -47,22 +47,22 @@ comment:
 ```
 
 That is a **load-bearing claim about reproducibility, asserted in prose, checkable by
-nobody**. An annotation is exactly the machinery for turning that sentence into something
+nobody**. A decorator is exactly the machinery for turning that sentence into something
 a machine can verify. The same applies to the 4 modules that call an LLM at runtime
 (`annotate_lni`, `confirm_positives`, `narrow_categories`, `preflight`) and the 12 that
 touch an RNG: today none of that is visible to the framework.
 
 ---
 
-## 2. The bar an annotation must clear
+## 2. The bar a decorator must clear
 
 More tags are not automatically better. I applied one filter to every idea below:
 
-> **An annotation earns its place only if (a) a machine can check that it holds, and
+> **A decorator earns its place only if (a) a machine can check that it holds, and
 > (b) its violation would threaten a research claim.**
 
-Anything that fails (a) is a comment. Anything that fails (b) is bookkeeping. The four
-existing annotations pass: each has a placement check and a runtime check. Every proposal
+Anything that fails (a) is a comment. Anything that fails (b) is bookkeeping. The
+existing dataflow decorators pass: each has a placement check and a runtime check. Every proposal
 below states its check explicitly — if I could not name one, I dropped it.
 
 ---
@@ -73,7 +73,7 @@ The natural move is to bolt a second, unrelated vocabulary onto the first. That 
 and seeing why is what makes the design work.
 
 **A hazard is a *specialisation* of a dataflow role, not a competitor to it.** Each new
-annotation says *"this is a `<dataflow kind>`, and specifically the dangerous sort"* — so
+decorator says *"this is a `<dataflow decorator>`, and specifically the dangerous sort"* — so
 it **inherits the parent's contract and adds one of its own**:
 
 ```
@@ -106,7 +106,7 @@ reliability figure.
 
 `@external_tool` is the one hazard with **no dataflow parent**, and that is informative
 rather than untidy: a subprocess may read, write, both or neither, so it does not sit
-anywhere on the dataflow axis. Which is exactly why the four annotations are blind to it.
+anywhere on the dataflow axis. Which is exactly why the dataflow decorators are blind to it.
 
 The `@stochastic ⊂ @functional` edge is the one that earns the design. A properly seeded
 sampler **is** a pure function — of its inputs *plus the seed*. That is not a weakening of
@@ -121,7 +121,7 @@ accident: `n_disagreements` is flagged as *both* a high-confidence `@functional`
 resolved. Under this one it is simply the truth — a pure function that happens to return a
 number the paper prints.
 
-This is also why **multiple annotations per function must be allowed** (§7): a function has
+This is also why **multiple decorators per function must be allowed** (§7): a function has
 *one* dataflow role and *zero or more* hazards. `stratified_sample` is `@stochastic` **and**
 `@unit_of_analysis`. `check_saia` is `@model_call` **and** `@validation`. `load_coders` is
 `@data_input` **and** `@human_input`.
@@ -167,7 +167,7 @@ per se.
 **Marks:** a call to a language model or other non-deterministic external service.
 
 **The audit question:** *"Which of your data did a model make up, and under what
-conditions?"* This is **the** annotation the stated goal needs. For research software that
+conditions?"* This is **the** decorator the stated goal needs. For research software that
 *uses* AI, the model call is where unverifiable content enters the study — and the current
 taxonomy calls it an in-memory transform with no I/O. That is wrong in three separate
 ways: it does I/O (network), it is not deterministic, and it costs money.
@@ -188,7 +188,7 @@ being filed under "reads a file".
 - *Runtime/provenance:* inherited from `@data_input` (the boundary must actually be
   crossed), plus: the call must record model id, prompt version, temperature, and the raw
   response. `annotate_lni.py` already has `response_log()` and `_complete_with_retries` —
-  the annotation would make that discipline *checkable* rather than merely present in one
+  the decorator would make that discipline *checkable* rather than merely present in one
   file and absent in the other three.
 
 **In the testbed:** 16 functions, including `classify_paper`, `_complete_with_retries`,
@@ -223,7 +223,7 @@ tested against.
   reliability statistic.** If a function reads more than one coder's file and nothing in the
   call graph computes an agreement figure over it, the study is presenting a subjective
   coding as if it were a measurement. In the testbed `compute_icr.py` *does* close this loop
-  — the annotation would make the loop **checkable** instead of merely present.
+  — the decorator would make the loop **checkable** instead of merely present.
 - *Provenance:* coder identity and codebook version go into the run record, exactly as model
   id and prompt version do for `@model_call`.
 
@@ -255,7 +255,7 @@ a part of the method as the code that calls it** — and it is not in the reposi
 still get a different result.
 
 This is the one hazard with **no dataflow parent**, and that is the finding: `subprocess.run`
-reads no file and writes no file *from the caller's point of view*, so the four annotations
+reads no file and writes no file *from the caller's point of view*, so the dataflow decorators
 classify a shell-out as an in-memory transform — the same failure mode as `classify_paper`,
 in a different disguise.
 
@@ -286,7 +286,7 @@ reference implementation, or carry a citation to its definition** — and the ru
 `differential_check` already exists, `krippendorff_reference.py` already *is* the pattern,
 and the whole `FORMULA_INFERENCE.md` argument (isolate the maths, render it, pin it against
 a trusted implementation) is written up. The library has the verification harness and **no
-annotation that triggers it**. `@statistical` is the missing trigger.
+decorator that triggers it**. `@statistical` is the missing trigger.
 
 **In the testbed:** 7 functions — `compute_dimension_icr`, `alpha_nominal`,
 `alpha_from_matrix`, `coincidence_stats`, `_library_alpha`, `gate_agreement`,
@@ -327,7 +327,7 @@ rather than software auditing, and I am not aware of an annotation framework tha
 ### `@config` — a threshold, hyperparameter, or path
 
 **Marks:** the constant/config providers. The coverage run found **26 functions that return
-a value, take no input, and do no I/O** — and the framework has no annotation for a single
+a value, take no input, and do no I/O** — and the framework has no decorator for a single
 one of them. They are currently invisible.
 
 **The audit question:** *"What thresholds did you use?"* Research results hinge on a
@@ -367,7 +367,7 @@ format shuffling — is fine, and *deserves* to be the boring residual. That is 
 after this change, `@mapping` meaning "nothing interesting happens here" becomes
 informative, because the interesting things now have names.
 
-**Allow multiple annotations per function.** The registry is currently one-kind-per-function,
+**Allow multiple decorators per function.** The registry is currently one-concern-per-function,
 and the proposals break that immediately: `stratified_sample` is `@stochastic` **and**
 `@unit_of_analysis`; `check_saia` is `@model_call` **and** `@validation`. The two axes are
 orthogonal by construction —
@@ -405,8 +405,8 @@ hazard             n   specialises
 Reproducibility-critical (36)
 ```
 
-**43% of `lni_study` is an audit hazard rather than plumbing** — and the four dataflow
-annotations can see none of it. The 36 "reproducibility-critical" functions (those carrying
+**43% of `lni_study` is an audit hazard rather than plumbing** — and the dataflow
+decorators can see none of it. The 36 "reproducibility-critical" functions (those carrying
 a *direct*, non-inherited provenance hazard: `@model_call`, `@human_input`, `@external_tool`,
 `@stochastic` or `@statistical`) are the shortlist a reviewer would actually want, and the
 framework could not previously produce it.
@@ -424,9 +424,9 @@ Three further mechanisms fell out of the implementation and are worth keeping:
   dangerous call is always three layers down. Only the four "where did this value come from?"
   hazards travel (model, person, subprocess, RNG); `@config` and `@validation` are properties
   of the function itself and do not contaminate a caller.
-- **Annotated functions are still screened.** Carrying `@mapping` does not exempt you: the
+- **Decorated functions are still screened.** Carrying `@mapping` does not exempt you: the
   scan flags `compute_dimension_icr` as `@statistical` *even though it is already
-  annotated*, and `load_coders` as `@human_input` on top of its `@data_input` — the
+  decorated*, and `load_coders` as `@human_input` on top of its `@data_input` — the
   orthogonality of the two axes showing up as a concrete result.
 - **Evidence, not vocabulary.** Each detector was tightened until every direct hit was real:
   RNG that only feeds a retry backoff is not `@stochastic`; a file boundary named after a
@@ -435,7 +435,7 @@ Three further mechanisms fell out of the implementation and are worth keeping:
   regression test.
 
 **What is not yet built:** the decorators themselves, the registry change that allows
-multiple kinds per function, and the runtime checks (same-seed determinism, cardinality
+multiple review concerns per function, and the runtime checks (same-seed determinism, cardinality
 tracing, provenance records). Detection is a worklist; enforcement is the contribution.
 
 *(Housekeeping, unrelated to the taxonomy: the scan currently includes `src/annotate_lni.fix.py`,

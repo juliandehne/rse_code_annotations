@@ -74,18 +74,24 @@ class PluginCatalog:
                mode: Optional[str] = None) -> List[Plugin]:
         """Instantiate the selected plugins (all, by default) with default settings."""
         chosen = [self.get(n) for n in names] if names else self.classes()
-        if mode is not None:
-            chosen = [c for c in chosen if c.supports(mode)]
-        if when is not None:
-            phases = set(when)
-            chosen = [c for c in chosen if c.when in phases]
-        return [cls() for cls in chosen]
+        return [cls() for cls in filter_plugins(chosen, when=when, mode=mode)]
 
     def __contains__(self, name: str) -> bool:
         return name in self._classes
 
     def __len__(self) -> int:
         return len(self._classes)
+
+
+def filter_plugins(plugins, *, when: Optional[Iterable[str]] = None,
+                   mode: Optional[str] = None) -> list:
+    """Keep the plugins (classes or instances) that run in one of ``when`` and offer ``mode``."""
+    if mode is not None:
+        plugins = [p for p in plugins if p.supports(mode)]
+    if when is not None:
+        phases = set(when)
+        plugins = [p for p in plugins if p.when in phases]
+    return list(plugins)
 
 
 def default_catalog(*, entry_points: bool = True) -> PluginCatalog:

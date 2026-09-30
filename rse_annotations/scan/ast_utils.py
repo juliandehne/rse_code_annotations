@@ -1,7 +1,8 @@
-"""Shared AST helpers: call names, the I/O vocabulary, annotation detection.
+"""Shared AST helpers: call names, file I/O, decorator detection.
 
-Used by the static scan (:mod:`rse_annotations.scan`) and by the per-annotation
-checks (:mod:`rse_annotations.inspection.checks`). Nothing here imports the target.
+Used by the static scan (:mod:`rse_annotations.scan`) and by the per-decorator
+checks (:mod:`rse_annotations.plugins.hazards.human_code_inspection.checks`).
+Nothing here imports the target.
 """
 
 from __future__ import annotations
@@ -9,25 +10,15 @@ from __future__ import annotations
 import ast
 from typing import Dict, List, Optional, Tuple
 
-from ..annotations.registry import KINDS
-
-# Calls that indicate file / stream I/O -- used by the purity and boundary lints.
-_READ_CALLS = {"open", "read", "read_text", "read_bytes", "load", "loads", "readlines",
-               "readline", "recv", "input"}
-_WRITE_CALLS = {"write", "writelines", "write_text", "write_bytes", "dump", "dumps",
-                "save", "to_csv", "to_json", "send", "flush"}
-# Name *prefixes* that also indicate reads / writes (catches pandas & friends:
-# read_csv, read_parquet, to_csv, to_markdown, to_parquet, ...).
-_READ_PREFIXES = ("read_", "load_")
-_WRITE_PREFIXES = ("write_", "to_", "save_", "dump_")
-
+from ..decorators.markers import REVIEW_CONCERNS, HazardDecorator
+from . import vocabulary as vocab
 
 def _is_read_name(name: str) -> bool:
-    return name in _READ_CALLS or name.startswith(_READ_PREFIXES)
+    return name in vocab.READ_CALLS or name.startswith(vocab.READ_PREFIXES)
 
 
 def _is_write_name(name: str) -> bool:
-    return name in _WRITE_CALLS or name.startswith(_WRITE_PREFIXES)
+    return name in vocab.WRITE_CALLS or name.startswith(vocab.WRITE_PREFIXES)
 
 
 def _called_names(node: ast.AST) -> set:
@@ -43,34 +34,8 @@ def _called_names(node: ast.AST) -> set:
     return names
 
 
-#: Names that *look* like reads/writes to the boundary heuristics but are really
-#: in-memory conversions (``json.loads``, ``df.to_dict``, ``pd.to_numeric``, ...).
-#: Without this the ``read_``/``to_`` prefix rules would label half of pandas as I/O.
-_NOT_FILE_IO = {
-    "loads", "dumps", "input", "flush", "send", "recv",
-    "to_dict", "to_list", "to_numpy", "to_string", "to_frame", "to_records",
-    "to_datetime", "to_numeric", "to_timedelta", "to_series", "to_set", "to_tuple",
-    "to_bytes", "to_pydatetime", "load_dotenv",
-}
-
-#: Method names that mean I/O only *sometimes*: ``x.write(...)`` is a file if ``x`` is
-#: a file, and a logger / socket / StringIO otherwise. We still count them, but never
-#: with high confidence -- the reviewer has to look.
-_GENERIC_IO = {"write", "read", "writelines", "readline", "readlines"}
-
-#: Calls a ``@functional`` body may make and still count as pure maths. Anything
-#: else means the body does *work* we cannot vouch for symbolically.
-_MATH_SAFE = {
-    "abs", "min", "max", "sum", "len", "round", "pow", "divmod",
-    "float", "int", "bool", "range", "enumerate", "zip", "sorted", "isnan",
-    "sqrt", "log", "log2", "log10", "exp", "sin", "cos", "tan", "floor", "ceil",
-    "mean", "median", "std", "var", "array", "asarray", "zeros", "ones", "dot",
-    "isclose", "sign", "prod", "clip", "nan_to_num", "count_nonzero", "unique",
-}
-
-
 # --------------------------------------------------------------------------- #
-# Syntactic annotation detection
+# Syntactic decorator detection
 # --------------------------------------------------------------------------- #
 
 def _dotted(node: ast.AST) -> str:
@@ -84,31 +49,31 @@ def _dotted(node: ast.AST) -> str:
     return ""
 
 
-def _alias_map(tree: ast.Module) -> Dict[str, str]:
+def _alias_map(tree: ast.Module) -> Dict[str, HazardDecorator]:
     """Map the local names that refer to our decorators onto their kind.
 
     Handles ``from rse_annotations import functional``, ``... import functional as pure``
     and ``import rse_annotations`` (used as ``@rse_annotations.functional``).
     """
-    aliases: Dict[str, str] = {}
+    aliases: Dict[str, HazardDecorator] = {}
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
             mod = node.module or ""
             if mod == "rse_annotations" or mod.startswith("rse_annotations."):
                 for a in node.names:
-                    if a.name in KINDS:
-                        aliases[a.asname or a.name] = a.name
+                    if a.name in REVIEW_CONCERNS:
+                        aliases[a.asname or a.name] = HazardDecorator(a.name)
         elif isinstance(node, ast.Import):
             for a in node.names:
                 if a.name == "rse_annotations":
                     # qualified use: <local>.functional
-                    for kind in KINDS:
+                    for kind in REVIEW_CONCERNS:
                         aliases[f"{a.asname or a.name}.{kind}"] = kind
     return aliases
 
 
-def _annotation_kind(node: ast.AST, aliases: Dict[str, str]) -> Optional[str]:
-    """Return the rse annotation applied to ``node``, if any (bare or called form)."""
+def _decorator_concern(node: ast.AST, aliases: Dict[str, HazardDecorator]) -> Optional[HazardDecorator]:
+    """Return the rse decorator applied to ``node``, if any (bare or called form)."""
     for dec in getattr(node, "decorator_list", []):
         name = _dotted(dec)
         if name in aliases:
@@ -116,8 +81,8 @@ def _annotation_kind(node: ast.AST, aliases: Dict[str, str]) -> Optional[str]:
         # Fall back to the bare kind name even without a recognised import: research
         # code is often copied around, and a literal @functional is unambiguous here.
         tail = name.rsplit(".", 1)[-1]
-        if tail in KINDS:
-            return tail
+        if tail in REVIEW_CONCERNS:
+            return HazardDecorator(tail)
     return None
 
 
@@ -156,7 +121,7 @@ def _file_io_calls(node: ast.AST) -> Tuple[List[str], List[str]]:
         if not isinstance(n, ast.Call):
             continue
         name = _call_name(n)
-        if not name or name in _NOT_FILE_IO:
+        if not name or name in vocab.NOT_FILE_IO:
             continue
         if name == "open":
             mode = _open_mode(n)

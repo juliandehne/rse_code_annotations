@@ -2,7 +2,7 @@
 
 Layout::
 
-    annotations/  the four marks (@functional, @mapping, @data_input, @data_output)
+    decorators/  the marks (@functional, @mapping, @data_input, @data_output, ...)
     scan/         static AST scan: coverage, candidates, hazards (never imports code)
     inspection/   the human review loop, verdicts, formula inference, snippets
     testing/      test-scaffold generation and differential verification
@@ -16,7 +16,7 @@ Layout::
 Public API::
 
     from rse_annotations import (
-        functional, mapping, data_input, data_output,   # the four annotations
+        functional, mapping, data_input, data_output,   # the decorators
         TargetProject, Audit,                            # run plugins over a project
         Plugin, PluginCatalog, default_catalog,          # the plugin contract + registry
         HumanCodeInspection,                             # the worked-example plugin
@@ -25,7 +25,7 @@ Public API::
 
 from __future__ import annotations
 
-from .annotations import (KIND_HELP, KINDS, REGISTRY, AnnotationInfo, Registry, annotation_of,
+from .decorators import (CONCERN_HELP, REVIEW_CONCERNS, HazardDecorator, REGISTRY, DecoratorInfo, Registry, decorator_of,
                           data_input, data_output, functional, mapping)
 from .core import (ENTRY_POINT_GROUP, MODE_LABELS, MODES, PHASES, SEVERITIES, AnalysisResult,
                    Audit, AuditReport, Finding, Plugin, PluginCatalog, TargetProject,
@@ -37,15 +37,15 @@ from .plugins.hazards import RESPONSIBLE_HAZARDS, HazardStub
 from .plugins.hazards.human_code_inspection import FACETS, HumanCodeInspection
 from .reporting import (JsonRenderer, MarkdownRenderer, Renderer, TextRenderer,
                         render_coverage_markdown, render_coverage_text)
-from .scan import (CRITICAL_HAZARDS, HAZARD_HELP, HAZARD_PARENT, HAZARDS, CoverageReport,
-                   FunctionRecord, Hazard, scan_path)
+from .scan import (CRITICAL_HAZARDS, HAZARD_HELP, HAZARD_KINDS, HAZARD_PARENT, HAZARDS, CoverageReport,
+                   FunctionRecord, Hazard, HazardKind, scan_path)
 from .testing import (DiffResult, DifferentialVerifier, StubFile, TestGenerator,
                       differential_check, generate_stub_files)
 
 __all__ = [
-    # annotations
-    "functional", "mapping", "data_input", "data_output", "annotation_of",
-    "REGISTRY", "Registry", "AnnotationInfo", "KINDS", "KIND_HELP",
+    # decorators
+    "functional", "mapping", "data_input", "data_output", "decorator_of",
+    "REGISTRY", "Registry", "DecoratorInfo", "HazardDecorator", "REVIEW_CONCERNS", "CONCERN_HELP",
     # core
     "TargetProject", "Plugin", "PHASES", "MODES", "MODE_LABELS",
     "Finding", "AnalysisResult", "SEVERITIES",
@@ -55,7 +55,7 @@ __all__ = [
     "HumanCodeInspection", "FACETS",
     # shared machinery
     "scan_path", "CoverageReport", "FunctionRecord", "Hazard", "HAZARDS", "HAZARD_PARENT",
-    "HAZARD_HELP", "CRITICAL_HAZARDS",
+    "HAZARD_HELP", "CRITICAL_HAZARDS", "HazardKind", "HAZARD_KINDS",
     "Reviewer", "VerdictStore", "Snippet", "extract_snippet",
     "TestGenerator", "DifferentialVerifier", "StubFile", "generate_stub_files",
     "DiffResult", "differential_check",

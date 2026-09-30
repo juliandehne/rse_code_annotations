@@ -5,8 +5,8 @@ test generator receives. It knows *where* the research code lives -- a local
 directory, or a git URL that is cloned on first use -- and caches the two expensive
 views of it that several plugins share:
 
-* :meth:`TargetProject.annotations` -- the annotated functions, found by *importing*
-  the code (:func:`~rse_annotations.annotations.discovery.discover_path`);
+* :meth:`TargetProject.decorated` -- the decorated functions, found by *importing*
+  the code (:func:`~rse_annotations.decorators.discovery.discover_path`);
 * :meth:`TargetProject.static_scan` -- the AST scan of every function, which never
   imports anything (:func:`~rse_annotations.scan.scan_path`).
 
@@ -28,8 +28,8 @@ from typing import Iterator, List, Optional, Union
 
 import importlib.util
 
-from ..annotations.discovery import _iter_python_files, discover_many, discover_path
-from ..annotations.registry import AnnotationInfo
+from ..decorators.discovery import _iter_python_files, discover_many, discover_path
+from ..decorators.registry import DecoratorInfo
 
 _URL_RE = re.compile(r"^(https?|git|ssh|file)://|^git@[^:]+:")
 
@@ -44,7 +44,7 @@ class TargetProject:
         ref: Branch or tag to check out when cloning.
         name: Display name; defaults to the directory or repository name.
         modules: Importable dotted module names (packages include their
-            submodules). Annotations are then discovered by importing these
+            submodules). Decorators are then discovered by importing these
             instead of every file under ``path``.
     """
 
@@ -67,7 +67,7 @@ class TargetProject:
         self._path = Path(path).resolve() if path is not None else None
         self.name = name or (", ".join(self.modules) if self.modules else
                              self._path.name if self._path else _repo_name(url))
-        self._annotations: Optional[List[AnnotationInfo]] = None
+        self._decorated: Optional[List[DecoratorInfo]] = None
         self._scan = None
 
     # ---- construction --------------------------------------------------- #
@@ -124,12 +124,12 @@ class TargetProject:
         return iter(sorted(_iter_python_files(self.root)))
 
     # ---- shared, cached views ------------------------------------------ #
-    def annotations(self) -> List[AnnotationInfo]:
-        """Annotated functions, found by importing the code (cached)."""
-        if self._annotations is None:
-            self._annotations = (discover_many(self.modules) if self.modules
+    def decorated(self) -> List[DecoratorInfo]:
+        """Decorated functions, found by importing the code (cached)."""
+        if self._decorated is None:
+            self._decorated = (discover_many(self.modules) if self.modules
                                  else discover_path(self.root))
-        return list(self._annotations)
+        return list(self._decorated)
 
     def static_scan(self):
         """The AST scan of every function -- no import, no execution (cached)."""
@@ -140,7 +140,7 @@ class TargetProject:
 
     def refresh(self) -> None:
         """Forget cached views, e.g. after the code was edited."""
-        self._annotations = None
+        self._decorated = None
         self._scan = None
 
     def __repr__(self) -> str:

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "rse-code-annotations"
 version = "0.2.0"
-description = "Role annotations for generated code, with a checking runner, formula inference, and pattern-based test-stub generation."
+description = "Role decorators for generated code, with a checking runner, formula inference, and pattern-based test-stub generation."
 readme = "README.md"
 requires-python = ">=3.9"
 authors = [{ name = "Julian Dehne" }]

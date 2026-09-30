@@ -16,7 +16,7 @@ How to implement one (course task)
    :class:`~rse_annotations.core.plugin.Plugin` and implement ``analyze(target)``.
    Reuse the shared machinery instead of writing your own:
    ``target.static_scan()`` (the AST scan of every function, never imports the target,
-   :mod:`rse_annotations.scan`), ``target.annotations()`` (the annotated functions,
+   :mod:`rse_annotations.scan`), ``target.decorated()`` (the decorated functions,
    imports the target), ``target.iter_python_files()`` (the raw tree).
 3. Optionally add the other two modes: ``inspect(target, input_fn=, output_fn=)`` for an
    interactive human review (see :mod:`rse_annotations.inspection.review`) and
@@ -57,7 +57,7 @@ class HazardStub(Plugin):
     difficulty: ClassVar[int] = 3
     #: Section of ideas/RESPONSIBLE_RSE_PLUGINS.md with the full proposal.
     proposal: ClassVar[str] = ""
-    #: Annotations / hazards the plugin hooks into.
+    #: Decorators / hazards the plugin hooks into.
     hooks: ClassVar[Tuple[str, ...]] = ()
     #: Suggested third-party tools (all optional dependencies).
     tools: ClassVar[Tuple[str, ...]] = ()

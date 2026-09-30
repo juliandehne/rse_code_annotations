@@ -88,7 +88,7 @@ class MarkdownRenderer(Renderer):
 
     A result whose ``data`` carries a :class:`~rse_annotations.scan.CoverageReport`
     (as ``data`` itself or as ``data.coverage``) is rendered with the full coverage
-    report, as ``annotation_coverage.md`` holds it; the findings follow.
+    report, as ``decorator_coverage.md`` holds it; the findings follow.
     """
 
     suffix = ".md"

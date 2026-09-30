@@ -1,9 +1,7 @@
-"""Interactive inspection of ``@functional`` annotations.
+"""The verdicts a human gave, and the ``inspection.yaml`` file that keeps them.
 
-The point is to help a human *inspect generated code*: for every ``@functional``
-we show the source and the inferred formula, then ask the reviewer to accept or
-decline it. The verdicts are recorded in an ``inspection.yaml`` next to the code so
-the review is auditable and re-runnable (previous verdicts pre-fill the defaults).
+One :class:`Verdict` per reviewed ``@functional``. :class:`VerdictStore` loads and
+saves them, so the review is auditable and a re-run pre-fills the previous answers.
 
 To avoid a runtime dependency, this module reads and writes the small, fixed YAML
 schema it owns with a hand-rolled emitter/parser -- not a general YAML library.
@@ -13,17 +11,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
-from ..annotations.registry import AnnotationInfo
+from typing import Dict, List, Tuple
 
 VERDICTS = ("accepted", "declined", "pending")
+
+#: The file name, written next to the inspected code.
+VERDICT_FILE = "inspection.yaml"
 
 
 @dataclass
 class Verdict:
     function: str
     location: str
-    kind: str
+    concern: str
     formula: str
     verdict: str  # one of VERDICTS
     note: str = ""
@@ -60,7 +60,7 @@ def dump_yaml(verdicts: List[Verdict]) -> str:
     for v in verdicts:
         lines.append(f"  - function: {_yq(v.function)}")
         lines.append(f"    location: {_yq(v.location)}")
-        lines.append(f"    kind: {_yq(v.kind)}")
+        lines.append(f"    concern: {_yq(v.concern)}")
         lines.append(f"    formula: {_yq(v.formula)}")
         lines.append(f"    verdict: {_yq(v.verdict)}")
         lines.append(f"    note: {_yq(v.note)}")
@@ -81,7 +81,7 @@ def load_yaml(path: Path) -> List[Verdict]:
             verdicts.append(Verdict(
                 function=current.get("function", ""),
                 location=current.get("location", ""),
-                kind=current.get("kind", ""),
+                concern=current.get("concern", current.get("kind", "")),
                 formula=current.get("formula", ""),
                 verdict=current.get("verdict", "pending"),
                 note=current.get("note", ""),
@@ -103,22 +103,25 @@ def load_yaml(path: Path) -> List[Verdict]:
 
 
 # --------------------------------------------------------------------------- #
-# Interactive loop -- kept as a function for existing callers; the logic lives
-# in :class:`rse_annotations.inspection.Reviewer`.
+# The file on disk
 # --------------------------------------------------------------------------- #
 
-def run_inspection(
-    infos: List[AnnotationInfo],
-    out_path,
-    *,
-    input_fn: Callable[[str], str] = input,
-    output_fn: Callable[[str], None] = print,
-) -> List[Verdict]:
-    """Walk every ``@functional`` info, prompt accept/decline, write the log.
+class VerdictStore:
+    """The ``inspection.yaml`` file: load, look up and save :class:`Verdict` records."""
 
-    Equivalent to ``Reviewer(VerdictStore(out_path), ...).review(infos)``.
-    """
-    from .review import Reviewer, VerdictStore
+    def __init__(self, path) -> None:
+        self.path = Path(path)
 
-    reviewer = Reviewer(VerdictStore(out_path), input_fn=input_fn, output_fn=output_fn)
-    return reviewer.review(infos)
+    @classmethod
+    def for_target(cls, target) -> "VerdictStore":
+        return cls(target.output_path(VERDICT_FILE))
+
+    def load(self) -> List[Verdict]:
+        return load_yaml(self.path) if self.path.exists() else []
+
+    def by_function(self) -> Dict[Tuple[str, str], Verdict]:
+        return {(v.function, v.location): v for v in self.load()}
+
+    def save(self, verdicts: List[Verdict]) -> None:
+        self.path.write_text(dump_yaml(verdicts), encoding="utf-8")
+

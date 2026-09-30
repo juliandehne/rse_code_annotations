@@ -20,23 +20,24 @@ from dataclasses import dataclass, field, asdict
 import warnings
 from typing import Callable, Dict, List, Optional, Union
 
-from .annotations.registry import AnnotationInfo
+from .decorators.registry import DecoratorInfo
 from .core.audit import Audit, AuditReport
 from .core.catalog import PluginCatalog
 from .core.target import TargetProject
-from .inspection import checks as _checks
+from .plugins.hazards.human_code_inspection import checks as _checks
 from .inspection.formula import FormulaResult, render_formula
 from .inspection.snippets import Snippet, extract_snippet
 from .plugins.hazards.human_code_inspection import HumanCodeInspection
+from .decorators.markers import HazardDecorator
 
 _STATUS = {"info": "pass", "warn": "warn", "fail": "fail"}
-#: The order :func:`~rse_annotations.inspection.checks.all_checks` reports in.
+#: The order the per-function checks are reported in.
 _ORDER = {"placement": 0, "docstring": 1, "io_success": 2}
 
 
 @dataclass
 class FunctionReport:
-    kind: str
+    concern: str
     name: str
     qualname: str
     location: str
@@ -58,8 +59,8 @@ class Report:
     formulas: List[FormulaResult] = field(default_factory=list)
 
     @classmethod
-    def from_audit(cls, infos: List[AnnotationInfo], audit: AuditReport) -> "Report":
-        """Regroup an audit's findings per annotated function, in discovery order."""
+    def from_audit(cls, infos: List[DecoratorInfo], audit: AuditReport) -> "Report":
+        """Regroup an audit's findings per decorated function, in discovery order."""
         by_fn: Dict[str, List[_checks.CheckResult]] = {i.qualname: [] for i in infos}
         try:
             result = audit.result(HumanCodeInspection.name)
@@ -70,10 +71,10 @@ class Report:
                 by_fn[f.function].append(_checks.CheckResult(
                     f.rule, _STATUS[f.severity], f.message))
         report = cls(functions=[
-            FunctionReport(i.kind, i.name, i.qualname, i.location,
+            FunctionReport(i.concern, i.name, i.qualname, i.location,
                            sorted(by_fn[i.qualname], key=lambda c: _ORDER.get(c.name, 9)))
             for i in infos])
-        functional = [i for i in infos if i.kind == "functional"]
+        functional = [i for i in infos if i.concern == HazardDecorator.FUNCTIONAL]
         report.snippets = [extract_snippet(i) for i in functional]
         if result is not None and result.data is not None:
             report.formulas = list(result.data.formulas)
@@ -96,7 +97,7 @@ class Report:
             "counts": self.counts,
             "functions": [
                 {
-                    "kind": fr.kind,
+                    "concern": fr.concern,
                     "name": fr.name,
                     "qualname": fr.qualname,
                     "location": fr.location,
@@ -154,7 +155,7 @@ class Runner:
 
     def run(self) -> Report:
         audit = self.audit()
-        return Report.from_audit(audit.target.annotations(), audit.run())
+        return Report.from_audit(audit.target.decorated(), audit.run())
 
 
 # --------------------------------------------------------------------------- #
@@ -171,7 +172,7 @@ def render_text(report: Report, *, show_snippets: bool = True) -> str:
                  f"{c['warn']} warn, {c['fail']} fail\n")
 
     for fr in report.functions:
-        lines.append(f"[{_ICON[fr.status]}] @{fr.kind} {fr.name}  ({fr.location})")
+        lines.append(f"[{_ICON[fr.status]}] @{fr.concern} {fr.name}  ({fr.location})")
         for chk in fr.checks:
             lines.append(f"    - {_ICON[chk.status]} {chk.name}: {chk.message}")
         lines.append("")

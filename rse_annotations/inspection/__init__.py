@@ -1,19 +1,16 @@
-"""Human inspection machinery: show code and its inferred maths, record verdicts.
+"""Human inspection: show code and its inferred maths, record the verdicts.
 
-* :mod:`.review` -- :class:`Reviewer` (the interactive loop), :class:`VerdictStore`
-  (``inspection.yaml``);
+* :mod:`.review` -- :class:`Reviewer`, the interactive loop;
+* :mod:`.verdicts` -- :class:`Verdict` and :class:`VerdictStore` (``inspection.yaml``);
 * :mod:`.formula` -- infer the formula behind a ``@functional``;
-* :mod:`.snippets` -- extract the source a human looks at;
-* :mod:`.checks` -- per-annotation convention and I/O checks.
+* :mod:`.snippets` -- extract the source a human looks at.
 """
 
-from .checks import CheckResult, all_checks, check_docstring, check_io_success, check_placement
 from .formula import FormulaResult, infer_formula, render_formula
-from .review import VERDICT_FILE, Reviewer, VerdictStore
+from .review import Reviewer
 from .snippets import Snippet, extract_snippet
-from .verdicts import VERDICTS, Verdict, dump_yaml, load_yaml, run_inspection
+from .verdicts import VERDICT_FILE, VERDICTS, Verdict, VerdictStore, dump_yaml, load_yaml
 
 __all__ = ["Reviewer", "VerdictStore", "VERDICT_FILE", "Verdict", "VERDICTS",
-           "dump_yaml", "load_yaml", "run_inspection", "FormulaResult", "infer_formula",
-           "render_formula", "Snippet", "extract_snippet", "CheckResult", "all_checks",
-           "check_placement", "check_docstring", "check_io_success"]
+           "dump_yaml", "load_yaml", "FormulaResult", "infer_formula",
+           "render_formula", "Snippet", "extract_snippet"]

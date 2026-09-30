@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List, Optional
 
-from ..annotations.registry import KINDS
+from ..decorators.markers import REVIEW_CONCERNS
 from ..scan.hazards import (_HAZARD_PRIORITY, CRITICAL_HAZARDS, HAZARD_HELP, HAZARD_PARENT,
                             HAZARDS, Hazard)
 from ..scan.model import CoverageReport, FunctionRecord
@@ -50,38 +50,38 @@ def _critical_hazard(rec: FunctionRecord) -> Optional[Hazard]:
 
 def render_coverage_text(report: CoverageReport, *, max_candidates: int = 25) -> str:
     """Render the coverage table and candidate worklist for the console."""
-    eligible, annotated = len(report.eligible), len(report.annotated)
+    eligible, decorated = len(report.eligible), len(report.decorated)
     lines = [
-        f"Annotation coverage for {report.root}",
+        f"Decorator coverage for {report.root}",
         f"  {report.files_scanned} file(s), {len(report.records)} function(s)/method(s) found; "
         f"{eligible} eligible (dunders, nested helpers and tests excluded)",
-        f"  annotated: {annotated}/{eligible}  ({report.coverage:.0%})",
+        f"  decorated: {decorated}/{eligible}  ({report.coverage:.0%})",
         "",
-        "By annotation kind",
+        "By review concern",
     ]
     present, suggested = report.counts_by_kind(), report.suggested_by_kind()
     lines.append(_table(
-        ["kind", "annotated", "candidates"],
-        [[f"@{k}", str(present[k]), str(suggested[k])] for k in KINDS],
+        ["concern", "decorated", "candidates"],
+        [[f"@{k}", str(present[k]), str(suggested[k])] for k in REVIEW_CONCERNS],
     ))
 
     lines += ["", "By file"]
     rows = []
     for file, recs in sorted(report.by_file().items()):
         elig = [r for r in recs if r.eligible]
-        ann = [r for r in recs if r.annotated]
+        ann = [r for r in recs if r.decorated]
         cand = [r for r in recs if r.is_candidate]
         if not elig:
             continue
         pct = f"{len(ann) / len(elig):.0%}"
         rows.append([_rel(report, file), str(len(elig)), str(len(ann)), pct, str(len(cand))])
-    lines.append(_table(["file", "funcs", "annotated", "coverage", "candidates"], rows))
+    lines.append(_table(["file", "funcs", "decorated", "coverage", "candidates"], rows))
 
     if report.hazardous:
         haz = report.counts_by_hazard()
         lines += ["", f"Audit hazards ({len(report.hazardous)}/{eligible} eligible functions, "
                       f"{report.hazard_rate:.0%})",
-                  "  Orthogonal to the four annotations: not 'where does data flow?' but",
+                  "  Orthogonal to the dataflow decorators: not 'where does data flow?' but",
                   "  'where can the result be wrong, and can I reproduce it?' (proposed, not yet enforced)"]
         lines.append(_table(
             ["hazard", "n", "specialises", "what it means"],
@@ -103,7 +103,7 @@ def render_coverage_text(report: CoverageReport, *, max_candidates: int = 25) ->
                 lines.append(f"  ... and {len(worst) - max_candidates} more (see the written report)")
 
     cands = report.candidates
-    lines += ["", f"Candidates for annotation ({len(cands)})"]
+    lines += ["", f"Candidates for a decorator ({len(cands)})"]
     shown = cands[:max_candidates]
     lines.append(_table(
         ["suggest", "conf", "function", "location", "why"],
@@ -121,50 +121,50 @@ def render_coverage_text(report: CoverageReport, *, max_candidates: int = 25) ->
 
 def render_coverage_markdown(report: CoverageReport) -> str:
     """Render the full report (every candidate, no truncation) as Markdown."""
-    eligible, annotated = len(report.eligible), len(report.annotated)
+    eligible, decorated = len(report.eligible), len(report.decorated)
     present, suggested = report.counts_by_kind(), report.suggested_by_kind()
 
     out = [
-        "# Annotation coverage",
+        "# Decorator coverage",
         "",
         f"Static (AST) scan of `{report.root}` — nothing imported, nothing executed.",
         "",
         f"- files scanned: **{report.files_scanned}**",
         f"- functions/methods found: **{len(report.records)}** "
         f"({eligible} eligible; dunders, nested helpers and tests excluded)",
-        f"- annotated: **{annotated}/{eligible}** (**{report.coverage:.0%}** coverage)",
-        f"- candidates for annotation: **{len(report.candidates)}**",
+        f"- decorated: **{decorated}/{eligible}** (**{report.coverage:.0%}** coverage)",
+        f"- candidates for a decorator: **{len(report.candidates)}**",
         "",
-        "## Coverage by kind",
+        "## Coverage by review concern",
         "",
-        "| Annotation | Present | Candidates |",
+        "| Decorator | Present | Candidates |",
         "| --- | ---: | ---: |",
     ]
-    out += [f"| `@{k}` | {present[k]} | {suggested[k]} |" for k in KINDS]
+    out += [f"| `@{k}` | {present[k]} | {suggested[k]} |" for k in REVIEW_CONCERNS]
 
     out += ["", "## Coverage by file", "",
-            "| File | Functions | Annotated | Coverage | Candidates |",
+            "| File | Functions | Decorated | Coverage | Candidates |",
             "| --- | ---: | ---: | ---: | ---: |"]
     for file, recs in sorted(report.by_file().items()):
         elig = [r for r in recs if r.eligible]
         if not elig:
             continue
-        ann = [r for r in recs if r.annotated]
+        ann = [r for r in recs if r.decorated]
         cand = [r for r in recs if r.is_candidate]
         out.append(f"| `{_rel(report, file)}` | {len(elig)} | {len(ann)} | "
                    f"{len(ann) / len(elig):.0%} | {len(cand)} |")
 
-    if report.annotated:
-        out += ["", "## Already annotated", "",
-                "| Function | File | Annotation |", "| --- | --- | --- |"]
-        for r in sorted(report.annotated, key=lambda r: (r.file, r.lineno)):
-            out.append(f"| `{r.qualname}` | `{_rel(report, r.file)}:{r.lineno}` | `@{r.kind}` |")
+    if report.decorated:
+        out += ["", "## Already decorated", "",
+                "| Function | File | Decorator |", "| --- | --- | --- |"]
+        for r in sorted(report.decorated, key=lambda r: (r.file, r.lineno)):
+            out.append(f"| `{r.qualname}` | `{_rel(report, r.file)}:{r.lineno}` | `@{r.concern}` |")
 
     if report.hazardous:
         haz = report.counts_by_hazard()
         out += ["", "## Audit hazards", "",
                 "A second, **orthogonal** axis (proposed — detected here, not yet enforced). The "
-                "four annotations answer *where does data flow?*; these answer *where can the "
+                "dataflow decorators answer *where does data flow?*; these answer *where can the "
                 "result be wrong, and can I reproduce it?* A function has one dataflow role and "
                 "zero or more hazards.", "",
                 f"**{len(report.hazardous)} of {eligible}** eligible functions "
@@ -184,7 +184,7 @@ def render_coverage_markdown(report: CoverageReport) -> str:
         for r in report.hazardous:
             kinds = ", ".join(f"`@{h.kind}`" + ("*" if h.indirect else "")
                               for h in sorted(r.hazards, key=lambda x: _HAZARD_PRIORITY[x.kind]))
-            role = f"`@{r.kind}`" if r.kind else (f"`@{r.suggested}`?" if r.suggested else "—")
+            role = f"`@{r.concern}`" if r.concern else (f"`@{r.suggested}`?" if r.suggested else "—")
             why = "; ".join(h.reason for h in sorted(
                 r.hazards, key=lambda x: _HAZARD_PRIORITY[x.kind])[:2])
             out.append(f"| {kinds} | `{r.qualname}` | `{_rel(report, r.file)}:{r.lineno}` | "
@@ -201,10 +201,10 @@ def render_coverage_markdown(report: CoverageReport) -> str:
                    f"`{_rel(report, c.file)}:{c.lineno}` | {c.reason} |")
 
     skipped = [r for r in report.records
-               if r.eligible and r.kind is None and r.suggested is None]
+               if r.eligible and r.concern is None and r.suggested is None]
     if skipped:
         out += ["", "## Not candidates", "",
-                "Eligible functions we deliberately do *not* propose an annotation for.",
+                "Eligible functions we deliberately do *not* propose a decorator for.",
                 "", "| Function | Location | Reason |", "| --- | --- | --- |"]
         for r in sorted(skipped, key=lambda r: (r.file, r.lineno)):
             out.append(f"| `{r.qualname}` | `{_rel(report, r.file)}:{r.lineno}` | {r.reason} |")
@@ -216,7 +216,7 @@ def render_coverage_markdown(report: CoverageReport) -> str:
     return "\n".join(out) + "\n"
 
 
-def write_coverage_report(target, output_fn=print, *, name: str = "annotation_coverage.md") -> int:
+def write_coverage_report(target, output_fn=print, *, name: str = "decorator_coverage.md") -> int:
     """Print the static coverage report of ``target`` and write the full one next to it.
 
     Never imports the target, so it also works on code that does not load.

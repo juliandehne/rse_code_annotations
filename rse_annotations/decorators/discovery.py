@@ -1,6 +1,6 @@
-"""Discovery: import a target module/package so its annotations register.
+"""Discovery: import a target module/package so its decorators register.
 
-The annotation decorators populate :data:`~rse_annotations.annotations.registry.REGISTRY` as a
+The decorators populate :data:`~rse_annotations.decorators.registry.REGISTRY` as a
 side effect of *import*. So "discovery" is just: import everything under the target,
 then read back the registry.
 
@@ -9,7 +9,7 @@ Note on Python's module cache: importing a module only runs its top-level code
 already-loaded module returns the cached object without re-executing anything. So
 we must NOT clear the global registry and expect a re-import to repopulate it --
 it won't. Instead we import (idempotently), then *filter* the registry down to the
-annotations whose defining module falls under the requested target(s). This is
+decorators whose defining module falls under the requested target(s). This is
 correct whether the target was imported for the first time just now or long ago.
 """
 
@@ -24,9 +24,9 @@ from pathlib import Path
 from types import ModuleType
 from typing import Iterable, List
 
-from .registry import REGISTRY, AnnotationInfo
+from .registry import REGISTRY, DecoratorInfo
 
-#: Directories never walked when discovering annotations under a path root.
+#: Directories never walked when discovering decorators under a path root.
 _SKIP_DIRS = {"__pycache__", ".git", ".hg", ".svn", ".venv", "venv", "env",
               "node_modules", ".mypy_cache", ".pytest_cache", "tests", "test_stubs",
               ".ipynb_checkpoints", "build", "dist"}
@@ -49,58 +49,23 @@ def _under_target(module_name: str, target: str) -> bool:
     return module_name == target or module_name.startswith(target + ".")
 
 
-def _select_for_targets(targets: Iterable[str]) -> List[AnnotationInfo]:
-    """Registry entries whose defining module lies under any of ``targets``.
-
-    Preserves registration order and de-duplicates across overlapping targets
-    (e.g. a package and one of its submodules).
-    """
-    targets = list(targets)
-    selected: List[AnnotationInfo] = []
-    seen: set = set()
-    for info in REGISTRY.all():
-        if not any(_under_target(info.module, t) for t in targets):
-            continue
-        key = (info.module, info.qualname, info.lineno)
-        if key in seen:
-            continue
-        seen.add(key)
-        selected.append(info)
-    return selected
+def _select_for_targets(targets: List[str]) -> List[DecoratorInfo]:
+    """Registry entries whose defining module lies under any of ``targets``."""
+    return [i for i in REGISTRY if any(_under_target(i.module, t) for t in targets)]
 
 
-def discover(target: str, *, clear: bool = True) -> List[AnnotationInfo]:
-    """Import ``target`` (dotted module/package path) and return its annotations.
-
-    Args:
-        target: Importable dotted path, e.g. ``"examples.sample_pipeline"``.
-        clear: Accepted for backward compatibility and ignored. Results are
-            already scoped to ``target`` by filtering the registry, so no global
-            reset is needed (and a reset would be unsafe -- see the module note).
-
-    Returns:
-        The list of :class:`AnnotationInfo` defined under ``target``.
-    """
-    module = importlib.import_module(target)
-    _import_all_submodules(module)
-    return _select_for_targets([target])
+def discover(target: str) -> List[DecoratorInfo]:
+    """Import ``target`` (dotted module/package path, e.g. ``"examples.sample_pipeline"``)
+    and return the decorated functions defined under it."""
+    return discover_many([target])
 
 
-def discover_many(targets: Iterable[str], *, clear: bool = True) -> List[AnnotationInfo]:
-    """Import several targets and return the combined annotations under them.
-
-    Args:
-        targets: importable dotted paths.
-        clear: accepted for backward compatibility and ignored (see :func:`discover`).
-
-    Returns:
-        The combined, de-duplicated list of :class:`AnnotationInfo` across all
-        targets, in registration order.
-    """
+def discover_many(targets: Iterable[str]) -> List[DecoratorInfo]:
+    """Import several dotted targets and return the decorated functions under them,
+    in registration order."""
     targets = list(targets)
     for target in targets:
-        module = importlib.import_module(target)
-        _import_all_submodules(module)
+        _import_all_submodules(importlib.import_module(target))
     return _select_for_targets(targets)
 
 
@@ -152,11 +117,11 @@ def _under_path(file: str, root: Path) -> bool:
         return False
 
 
-def discover_path(root) -> List[AnnotationInfo]:
-    """Discover annotations by walking a directory (no dotted import needed).
+def discover_path(root) -> List[DecoratorInfo]:
+    """Discover decorators by walking a directory (no dotted import needed).
 
     Every ``*.py`` file under ``root`` is imported so its decorators register, then
-    the registry is filtered down to annotations whose source file lives under
+    the registry is filtered down to decorators whose source file lives under
     ``root``. ``root`` (and its parent) are placed on ``sys.path`` first so intra-
     project imports resolve. Files that fail to import are reported and skipped.
 
@@ -164,7 +129,7 @@ def discover_path(root) -> List[AnnotationInfo]:
         root: Directory to scan (``str`` or ``Path``). Defaults elsewhere to cwd.
 
     Returns:
-        The list of :class:`AnnotationInfo` defined anywhere under ``root``.
+        The list of :class:`DecoratorInfo` defined anywhere under ``root``.
     """
     root = Path(root).resolve()
     if not root.is_dir():
@@ -183,14 +148,5 @@ def discover_path(root) -> List[AnnotationInfo]:
         except BaseException as exc:  # noqa: BLE001 - incl. SystemExit from script-style modules
             print(f"[discovery] warning: could not import {path}: {exc!r}")
 
-    selected: List[AnnotationInfo] = []
-    seen: set = set()
-    for info in REGISTRY.all():
-        if info.file in (None, "<unknown>") or not _under_path(info.file, root):
-            continue
-        key = (info.module, info.qualname, info.lineno)
-        if key in seen:
-            continue
-        seen.add(key)
-        selected.append(info)
-    return selected
+    return [i for i in REGISTRY
+            if i.file != "<unknown>" and _under_path(i.file, root)]

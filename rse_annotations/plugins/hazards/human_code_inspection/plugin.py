@@ -2,7 +2,7 @@
 carries the claim?*
 
 The hazard: generated (or hastily written) research code whose maths no person
-has checked. Producers mark what their functions are with the four annotations;
+has checked. Producers mark what their functions are with the decorators;
 this plugin uses the marks to point a reviewer at the code that matters and to
 record what the reviewer decided. It is the worked example of the plugin contract
 and implements all three modes:
@@ -12,20 +12,20 @@ and implements all three modes:
   ============  =====================================================  ==============
   facet         question                                               imports target
   ============  =====================================================  ==============
-  coverage      how much of the code is annotated, what should be?     no
+  coverage      how much of the code is decorated, what should be?     no
   hazards       which functions carry reproducibility hazards?         no
   uninspected   which ``@functional`` has no *accepted* verdict?       no
-  conventions   does each annotation fit the code it sits on?          yes
+  conventions   does each decorator fit the code it sits on?          yes
   math          what formula does each ``@functional`` compute?        yes
   io            do ``@data_input``/``@data_output`` really do I/O?     yes (runs it)
   ============  =====================================================  ==============
 
 * **inspect** -- the interactive review loop
   (:class:`~rse_annotations.inspection.Reviewer`), writing ``inspection.yaml``;
-* **generate_tests** -- pytest scaffolds for every annotation
+* **generate_tests** -- pytest scaffolds for every decorator
   (:class:`~rse_annotations.testing.TestGenerator`).
 
-Annotation coverage is not a hazard of its own: it is the facet that tells the
+Decorator coverage is not a hazard of its own: it is the facet that tells the
 reviewer where marks are missing, so the other facets can see the code at all.
 """
 
@@ -35,15 +35,16 @@ import os
 from dataclasses import dataclass, field
 from typing import Callable, ClassVar, Dict, List, Optional, Sequence, Tuple
 
-from ....annotations.registry import AnnotationInfo
+from ....decorators.registry import DecoratorInfo
 from ....core.findings import AnalysisResult, Finding
 from ....core.plugin import Plugin
-from ....inspection import checks as _checks
+from . import checks as _checks
 from ....inspection.formula import FormulaResult, infer_formula
-from ....inspection.review import Reviewer, VerdictStore
+from ....inspection import Reviewer, VerdictStore
 from ....inspection.verdicts import Verdict
 from ....scan import CRITICAL_HAZARDS, CoverageReport
 from ....testing import TestGenerator
+from ....decorators.markers import HazardDecorator
 
 #: Every facet, in reporting order. The first three never import the target.
 FACETS: Tuple[str, ...] = ("coverage", "hazards", "uninspected", "conventions", "math", "io")
@@ -64,7 +65,7 @@ class InspectionData:
     verdicts: List[Verdict] = field(default_factory=list)
 
 
-def _from_check(info: AnnotationInfo, check: "_checks.CheckResult") -> Finding:
+def _from_check(info: DecoratorInfo, check: "_checks.CheckResult") -> Finding:
     return Finding(rule=check.name, severity=_SEVERITY[check.status], message=check.message,
                    function=info.qualname, location=info.location)
 
@@ -74,7 +75,7 @@ def _same_file(a: str, b: str) -> bool:
 
 
 class HumanCodeInspection(Plugin):
-    """Points a human at annotated code, records their verdicts, reports what is unchecked.
+    """Points a human at decorated code, records their verdicts, reports what is unchecked.
 
     Args:
         facets: The :data:`FACETS` to analyse (default: all). ``STATIC_FACETS`` never
@@ -85,7 +86,7 @@ class HumanCodeInspection(Plugin):
     """
 
     name: ClassVar[str] = "human_code_inspection"
-    description: ClassVar[str] = ("has a human inspected the annotated code? coverage, "
+    description: ClassVar[str] = ("has a human inspected the decorated code? coverage, "
                                   "hazards, unreviewed maths, conventions, I/O")
     question: ClassVar[str] = "has a human checked the code that carries the claim?"
     imports_target: ClassVar[bool] = True
@@ -113,15 +114,15 @@ class HumanCodeInspection(Plugin):
             findings += self.uninspected_findings(data.coverage, data.verdicts)
         wants_import = [f for f in ("conventions", "math", "io") if f in self.facets]
         if wants_import:
-            infos = target.annotations()
+            infos = target.decorated()
             for info in infos:
                 if "conventions" in self.facets:
                     findings += self.convention_findings(info)
-                if "math" in self.facets and info.kind == "functional":
+                if "math" in self.facets and info.concern == HazardDecorator.FUNCTIONAL:
                     res = infer_formula(info)
                     data.formulas.append(res)
                     findings.append(self.formula_finding(info, res))
-                if "io" in self.facets and info.kind in ("data_input", "data_output"):
+                if "io" in self.facets and info.concern in (HazardDecorator.DATA_INPUT, HazardDecorator.DATA_OUTPUT):
                     findings.append(self.io_finding(info))
         return self.result(findings, data=data)
 
@@ -129,7 +130,7 @@ class HumanCodeInspection(Plugin):
     def coverage_findings(report: CoverageReport) -> List[Finding]:
         findings = [Finding(
             "coverage", "info",
-            f"{len(report.annotated)}/{len(report.eligible)} eligible functions annotated "
+            f"{len(report.decorated)}/{len(report.eligible)} eligible functions decorated "
             f"({report.coverage:.0%}) across {report.files_scanned} file(s)",
             evidence={"coverage": report.coverage, "files": report.files_scanned})]
         for rec in report.candidates:
@@ -155,8 +156,8 @@ class HumanCodeInspection(Plugin):
         """Every ``@functional`` without an accepted verdict: ``fail`` if a human
         declined it, ``warn`` if nobody has decided yet."""
         findings = []
-        for rec in report.annotated:
-            if rec.kind != "functional":
+        for rec in report.decorated:
+            if rec.concern != HazardDecorator.FUNCTIONAL:
                 continue
             verdict = next((v for v in verdicts if v.function == rec.name
                             and _same_file(v.location.rsplit(":", 1)[0], rec.file)), None)
@@ -172,16 +173,16 @@ class HumanCodeInspection(Plugin):
         return findings
 
     @staticmethod
-    def convention_findings(info: AnnotationInfo) -> List[Finding]:
+    def convention_findings(info: DecoratorInfo) -> List[Finding]:
         """Placement (a ``@functional`` does no I/O, a boundary really does) and, for
-        non-functional kinds, that the docstring documents the declared fields."""
+        non-functional concerns, that the docstring documents the declared fields."""
         found = [_from_check(info, _checks.check_placement(info))]
-        if info.kind != "functional":
+        if info.concern != HazardDecorator.FUNCTIONAL:
             found.append(_from_check(info, _checks.check_docstring(info)))
         return found
 
     @staticmethod
-    def formula_finding(info: AnnotationInfo, res: FormulaResult) -> Finding:
+    def formula_finding(info: DecoratorInfo, res: FormulaResult) -> Finding:
         if res.any_formula:
             formula = (res.ast_forms or [res.sympy_form or res.latexify_form])[0]
             return Finding("formula", "info", f"inferred: {formula}",
@@ -192,7 +193,7 @@ class HumanCodeInspection(Plugin):
                        "review the source", function=info.qualname, location=info.location,
                        evidence={"notes": res.notes})
 
-    def io_finding(self, info: AnnotationInfo) -> Finding:
+    def io_finding(self, info: DecoratorInfo) -> Finding:
         fixture = self.fixtures.get(info.qualname) or self.fixtures.get(info.name)
         return _from_check(info, _checks.check_io_success(info, fixture=fixture))
 
@@ -202,10 +203,10 @@ class HumanCodeInspection(Plugin):
         """Step through every ``@functional`` and record accept / decline / skip."""
         reviewer = Reviewer(VerdictStore.for_target(target), input_fn=input_fn,
                             output_fn=output_fn)
-        return reviewer.review(target.annotations())
+        return reviewer.review(target.decorated())
 
     # ---- test generation ------------------------------------------------ #
     def generate_tests(self, target, *, out_dir=None,
                        output_fn: Callable[[str], None] = print):
-        """Pattern-based pytest scaffolds for every annotation (``<target>/tests/``)."""
+        """Pattern-based pytest scaffolds for every decorator (``<target>/tests/``)."""
         return [sf.path for sf in TestGenerator(target, out_dir).write(output_fn)]

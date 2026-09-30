@@ -1,9 +1,9 @@
 # rse_code_annotations: everything needed to run the tool, the tests and the formula inference.
 #   pip install -r requirements.txt
 # The core package itself has no third-party dependencies (Python >= 3.9).
--e .
 sympy>=1.12
 latexify-py>=0.4
 pytest>=7
 # optional: the documentation-coverage plugin exercise (examples/plugin_template)
+# . -e
 # -e examples/plugin_template

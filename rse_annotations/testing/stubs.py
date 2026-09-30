@@ -1,6 +1,6 @@
 """Pattern-based ``pytest`` stub generation (no LLM, no network).
 
-Each annotation kind has a *clear, fixed shape*, so a useful test scaffold can be
+Each review concern has a *clear, fixed shape*, so a useful test scaffold can be
 generated from pure introspection — no model required:
 
 * ``@functional`` — pure maths: assert determinism now, plus a stub to pin the
@@ -26,7 +26,8 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from ..inspection.formula import infer_formula
-from ..annotations.registry import AnnotationInfo
+from ..decorators.registry import DecoratorInfo
+from ..decorators.markers import HazardDecorator
 
 
 @dataclass
@@ -49,14 +50,14 @@ def _safe_ident(name: str) -> str:
     return ident
 
 
-def _signature(info: AnnotationInfo) -> str:
+def _signature(info: DecoratorInfo) -> str:
     try:
         return str(inspect.signature(info.func))
     except (TypeError, ValueError):
         return "(...)"
 
 
-def _param_names(info: AnnotationInfo) -> List[str]:
+def _param_names(info: DecoratorInfo) -> List[str]:
     try:
         sig = inspect.signature(info.func)
     except (TypeError, ValueError):
@@ -65,7 +66,7 @@ def _param_names(info: AnnotationInfo) -> List[str]:
             if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY)]
 
 
-def _fields_comment(info: AnnotationInfo) -> List[str]:
+def _fields_comment(info: DecoratorInfo) -> List[str]:
     if not info.fields:
         return []
     lines = ["    # Declared fields:"]
@@ -74,7 +75,7 @@ def _fields_comment(info: AnnotationInfo) -> List[str]:
     return lines
 
 
-def _functional_stub(info: AnnotationInfo) -> str:
+def _functional_stub(info: DecoratorInfo) -> str:
     name = info.name
     params = _param_names(info)
     call_args = ", ".join(params) if params else ""
@@ -102,7 +103,7 @@ def _functional_stub(info: AnnotationInfo) -> str:
     )
 
 
-def _mapping_stub(info: AnnotationInfo) -> str:
+def _mapping_stub(info: DecoratorInfo) -> str:
     name = info.name
     fields = "\n".join(_fields_comment(info))
     fields = (fields + "\n") if fields else ""
@@ -117,7 +118,7 @@ def _mapping_stub(info: AnnotationInfo) -> str:
     )
 
 
-def _data_input_stub(info: AnnotationInfo) -> str:
+def _data_input_stub(info: DecoratorInfo) -> str:
     name = info.name
     fields = "\n".join(_fields_comment(info))
     fields = (fields + "\n") if fields else ""
@@ -133,7 +134,7 @@ def _data_input_stub(info: AnnotationInfo) -> str:
     )
 
 
-def _data_output_stub(info: AnnotationInfo) -> str:
+def _data_output_stub(info: DecoratorInfo) -> str:
     name = info.name
     fields = "\n".join(_fields_comment(info))
     fields = (fields + "\n") if fields else ""
@@ -149,19 +150,19 @@ def _data_output_stub(info: AnnotationInfo) -> str:
     )
 
 
-_STUB_BY_KIND = {
-    "functional": _functional_stub,
-    "mapping": _mapping_stub,
-    "data_input": _data_input_stub,
-    "data_output": _data_output_stub,
+_STUB_BY_CONCERN = {
+    HazardDecorator.FUNCTIONAL: _functional_stub,
+    HazardDecorator.MAPPING: _mapping_stub,
+    HazardDecorator.DATA_INPUT: _data_input_stub,
+    HazardDecorator.DATA_OUTPUT: _data_output_stub,
 }
 
 
-def stub_for(info: AnnotationInfo) -> str:
-    """Return the pytest stub body for a single annotation."""
-    header = (f"# --- @{info.kind} {info.name}{_signature(info)}  "
+def stub_for(info: DecoratorInfo) -> str:
+    """Return the pytest stub body for a single decorator."""
+    header = (f"# --- @{info.concern} {info.name}{_signature(info)}  "
               f"({info.location}) ---\n")
-    builder = _STUB_BY_KIND.get(info.kind, _mapping_stub)
+    builder = _STUB_BY_CONCERN.get(info.concern, _mapping_stub)
     return header + builder(info)
 
 
@@ -172,8 +173,8 @@ def _module_import_line(module: str, names: List[str]) -> str:
     return f"from {module} import {joined}  # noqa: F401  (imported for the stubs below)\n"
 
 
-def generate_stub_module(module: str, infos: List[AnnotationInfo]) -> str:
-    """Render a full pytest module for all annotations from one source module."""
+def generate_stub_module(module: str, infos: List[DecoratorInfo]) -> str:
+    """Render a full pytest module for all decorators from one source module."""
     names = [i.name for i in infos]
     lines = [
         f'"""Auto-generated pytest stubs for {module}.',
@@ -193,11 +194,11 @@ def generate_stub_module(module: str, infos: List[AnnotationInfo]) -> str:
     return "\n".join(lines) + body + "\n"
 
 
-def generate_stub_files(infos: List[AnnotationInfo], out_dir) -> List[StubFile]:
-    """Group annotations by source module and render one stub file per module.
+def generate_stub_files(infos: List[DecoratorInfo], out_dir) -> List[StubFile]:
+    """Group decorators by source module and render one stub file per module.
 
     Args:
-        infos: annotations to scaffold (any mix of kinds).
+        infos: decorators to scaffold (any mix of concerns).
         out_dir: directory to write ``test_<module>.py`` files into.
 
     Returns:
@@ -205,7 +206,7 @@ def generate_stub_files(infos: List[AnnotationInfo], out_dir) -> List[StubFile]:
         the caller decides when to write, so the flow can preview first).
     """
     out_dir = Path(out_dir)
-    by_module: Dict[str, List[AnnotationInfo]] = {}
+    by_module: Dict[str, List[DecoratorInfo]] = {}
     for info in infos:
         by_module.setdefault(info.module, []).append(info)
 

@@ -1,6 +1,6 @@
-"""Reviewable code snippets for annotated functions (dependency-free, no LLM).
+"""Reviewable code snippets for decorated functions (dependency-free, no LLM).
 
-For any annotation the runner or the interactive inspector can pull the source of
+For any decorator the runner or the interactive inspector can pull the source of
 the decorated function so a human can read it. It has no third-party dependencies
 and no network use.
 """
@@ -11,12 +11,12 @@ import inspect
 from dataclasses import dataclass
 from typing import Optional
 
-from ..annotations.registry import AnnotationInfo
+from ..decorators.registry import DecoratorInfo
 
 
 @dataclass
 class Snippet:
-    """A reviewable code snippet extracted from an annotated function."""
+    """A reviewable code snippet extracted from a decorated function."""
 
     name: str
     location: str
@@ -25,8 +25,8 @@ class Snippet:
     docstring: Optional[str] = None
 
 
-def extract_snippet(info: AnnotationInfo) -> Snippet:
-    """Build a :class:`Snippet` from an annotation (pure introspection, no API)."""
+def extract_snippet(info: DecoratorInfo) -> Snippet:
+    """Build a :class:`Snippet` from a decorator (pure introspection, no API)."""
     try:
         source = inspect.getsource(info.func)
     except (OSError, TypeError):

@@ -13,9 +13,9 @@ of the general entry point (``python -m rse_annotations``):
   pin what the plugin cares about.
 
 A plugin overrides only the capabilities it has; :meth:`Plugin.modes` reports
-which. The machinery a plugin builds on -- the annotations, the AST scan, the
+which. The machinery a plugin builds on -- the decorators, the AST scan, the
 review loop, the stub writer, the renderers -- lives in its own packages
-(:mod:`rse_annotations.annotations`, :mod:`~rse_annotations.scan`,
+(:mod:`rse_annotations.decorators`, :mod:`~rse_annotations.scan`,
 :mod:`~rse_annotations.inspection`, :mod:`~rse_annotations.testing`,
 :mod:`~rse_annotations.reporting`) so several plugins can share it.
 
@@ -29,6 +29,7 @@ from __future__ import annotations
 from typing import Callable, ClassVar, Optional, Tuple
 
 from .findings import AnalysisResult
+from .target import TargetProject
 
 #: When a plugin's analysis runs: over source only, while tests run, while the
 #: target runs (see ``ideas/RUNTIME_HAZARDS.md``), or as a gate in CI.
@@ -83,16 +84,16 @@ class Plugin:
         return "an optional dependency is not installed"
 
     # ---- the three capabilities (override what you support) ------------- #
-    def analyze(self, target) -> AnalysisResult:
-        """Hazard analysis of ``target`` (a :class:`~rse_annotations.core.target.TargetProject`)."""
+    def analyze(self, target: TargetProject) -> AnalysisResult:
+        """Hazard analysis of ``target``."""
         raise NotImplementedError(f"{self.name} does not offer hazard analysis")
 
-    def inspect(self, target, *, input_fn: Callable[[str], str] = input,
+    def inspect(self, target: TargetProject, *, input_fn: Callable[[str], str] = input,
                 output_fn: Callable[[str], None] = print):
         """Interactive human inspection of ``target``."""
         raise NotImplementedError(f"{self.name} does not offer human inspection")
 
-    def generate_tests(self, target, *, out_dir=None,
+    def generate_tests(self, target: TargetProject, *, out_dir=None,
                        output_fn: Callable[[str], None] = print):
         """Write test scaffolds for ``target``; returns the written paths."""
         raise NotImplementedError(f"{self.name} does not offer test generation")

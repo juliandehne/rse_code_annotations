@@ -14,7 +14,7 @@ from .._stub import HazardStub
 class SilentFailure(HazardStub):
     """TODO (Tier A, S): code that silently changes the sample or the numbers.
 
-    Inside annotated functions only, detect ``except: pass`` / ``except Exception:
+    Inside decorated functions only, detect ``except: pass`` / ``except Exception:
     continue`` without logging or a counter; ``pd.to_numeric(errors="coerce")``;
     ``read_csv(on_bad_lines="skip")``; ``warnings.filterwarnings("ignore")``;
     ``np.seterr(all="ignore")``; ``dropna()`` / ``drop_duplicates()`` whose row delta is

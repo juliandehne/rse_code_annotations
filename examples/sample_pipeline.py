@@ -1,4 +1,4 @@
-"""Example pipeline exercising all four annotations.
+"""Example pipeline exercising every decorator.
 
 Point the interactive tool at this directory::
 
@@ -47,7 +47,7 @@ def mean(values: List[float]) -> float:
 
 @functional
 def impure_sum(path: str) -> float:
-    """A deliberately mis-annotated function: reads a file, so not pure."""
+    """A deliberately mis-decorated function: reads a file, so not pure."""
     with open(path) as fh:
         return sum(float(line) for line in fh)
 

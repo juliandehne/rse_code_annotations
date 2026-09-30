@@ -7,7 +7,7 @@ import pytest
 from rse_annotations import (
     MODES, PHASES, RESPONSIBLE_HAZARDS, AnalysisResult, Audit, Finding, HazardStub,
     HumanCodeInspection, JsonRenderer, MarkdownRenderer, Plugin, PluginCatalog,
-    TargetProject, TestGenerator, TextRenderer, default_catalog,
+    Reviewer, TargetProject, TestGenerator, TextRenderer, VerdictStore, default_catalog,
 )
 from rse_annotations.core.target import is_url
 from rse_annotations.plugins.hazards.human_code_inspection import STATIC_FACETS, InspectionData
@@ -169,7 +169,7 @@ def test_audit_runs_the_inspection_plugin_on_sample(tmp_path):
     assert [r.plugin for r in report.results] == ["human_code_inspection"]
     result = report.result("human_code_inspection")
     assert isinstance(result.data, InspectionData) and result.data.formulas
-    assert "eligible functions annotated" in result.findings[0].message
+    assert "eligible functions decorated" in result.findings[0].message
     assert {"coverage", "uninspected", "formula", "placement"} <= {f.rule for f in result.findings}
     assert any(f.rule == "formula" and f.function.endswith("area") for f in result.findings)
     assert json.loads(json.dumps(report.to_dict()))["target"] == tmp_path.name
@@ -224,15 +224,16 @@ def test_renderers_cover_results(tmp_path):
     assert "[SKIP] licence" in text and "2 plugin(s) run" in text
     md = MarkdownRenderer().render_results(results)
     assert "# Audit report" in md and "| licence | skipped |" in md
-    assert "# Annotation coverage" in md
+    assert "# Decorator coverage" in md
     assert json.loads(JsonRenderer().render_results(results))["results"][1]["plugin"] == "licence"
 
 
 def test_reviewer_and_verdict_rendering(tmp_path):
     _write_sample(tmp_path, "pkg_review")
     audit = Audit(TargetProject.from_path(tmp_path))
-    verdicts = audit.reviewer(input_fn=lambda _p: "y", output_fn=lambda _m: None).review(
-        audit.target.annotations())
+    reviewer = Reviewer(VerdictStore.for_target(audit.target),
+                        input_fn=lambda _p: "y", output_fn=lambda _m: None)
+    verdicts = reviewer.review(audit.target.decorated())
     assert (tmp_path / "inspection.yaml").exists()
     assert "1 accepted" in TextRenderer().render_verdicts(verdicts)
     assert json.loads(JsonRenderer().render_verdicts(verdicts))["summary"]["accepted"] == 1

@@ -1,4 +1,4 @@
-"""Human review of ``@functional`` code: :class:`VerdictStore` and :class:`Reviewer`.
+"""Human review of ``@functional`` code: the :class:`Reviewer` loop.
 
 The machine proposes (source + inferred formula), the human decides (accept /
 decline / skip). Verdicts persist in ``inspection.yaml`` next to the code, so the
@@ -8,39 +8,13 @@ never goes into that file -- it holds human judgement only.
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, List, Optional
 
 from .formula import infer_formula
-from .verdicts import VERDICTS, Verdict, dump_yaml, load_yaml
-from ..annotations.registry import AnnotationInfo
+from .verdicts import VERDICTS, Verdict, VerdictStore
+from ..decorators.registry import DecoratorInfo
 from .snippets import extract_snippet
-
-VERDICT_FILE = "inspection.yaml"
-
-
-class VerdictStore:
-    """The ``inspection.yaml`` file: load, look up and save :class:`Verdict` records."""
-
-    def __init__(self, path) -> None:
-        self.path = Path(path)
-
-    @classmethod
-    def for_target(cls, target) -> "VerdictStore":
-        return cls(target.output_path(VERDICT_FILE))
-
-    def load(self) -> List[Verdict]:
-        return load_yaml(self.path) if self.path.exists() else []
-
-    def by_function(self) -> Dict[Tuple[str, str], Verdict]:
-        return {(v.function, v.location): v for v in self.load()}
-
-    def save(self, verdicts: List[Verdict]) -> None:
-        self.path.write_text(dump_yaml(verdicts), encoding="utf-8")
-
-    def summary(self) -> Dict[str, int]:
-        verdicts = self.load()
-        return {k: sum(1 for v in verdicts if v.verdict == k) for k in VERDICTS}
+from ..decorators.markers import HazardDecorator
 
 
 class Reviewer:
@@ -61,14 +35,14 @@ class Reviewer:
         self.input_fn = input_fn
         self.output_fn = output_fn
 
-    def review(self, infos: List[AnnotationInfo]) -> List[Verdict]:
+    def review(self, infos: List[DecoratorInfo]) -> List[Verdict]:
         """Review the ``@functional`` entries of ``infos``; write and return the verdicts."""
         out = self.output_fn
-        functional = [i for i in infos if i.kind == "functional"]
+        functional = [i for i in infos if i.concern == HazardDecorator.FUNCTIONAL]
         previous = self.store.by_function()
 
         if not functional:
-            out("No @functional annotations found to inspect.")
+            out("No @functional decorators found to inspect.")
             self.store.save([])
             return []
 
@@ -78,7 +52,7 @@ class Reviewer:
             formula = self.formula_line(info)
             self.present(info, formula, prior, idx, len(functional))
             verdicts.append(Verdict(
-                function=info.name, location=info.location, kind=info.kind,
+                function=info.name, location=info.location, concern=info.concern,
                 formula=formula, verdict=self.ask(prior.verdict if prior else "pending")))
 
         self.store.save(verdicts)
@@ -91,7 +65,7 @@ class Reviewer:
 
     # ---- steps a subclass may override --------------------------------- #
     @staticmethod
-    def formula_line(info: AnnotationInfo) -> str:
+    def formula_line(info: DecoratorInfo) -> str:
         res = infer_formula(info)
         if res.ast_forms:
             return res.ast_forms[0]
@@ -99,7 +73,7 @@ class Reviewer:
             return res.sympy_form
         return "(no closed-form formula could be inferred; inspect the source)"
 
-    def present(self, info: AnnotationInfo, formula: str, prior: Optional[Verdict],
+    def present(self, info: DecoratorInfo, formula: str, prior: Optional[Verdict],
                 idx: int, total: int) -> None:
         out = self.output_fn
         out("")

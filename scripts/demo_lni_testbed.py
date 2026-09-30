@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """End-to-end demo: run every rse_code_annotations feature against a real testbed.
 
-The testbed is the ``lni_study`` repo, which carries the four role annotations
+The testbed is the ``lni_study`` repo, which carries the role decorators
 (``@functional`` / ``@mapping`` / ``@data_input`` / ``@data_output``) on
 ``src/compute_icr.py`` and ``src/krippendorff_reference.py``. This script clones it
 into a throwaway directory, drives the documented CLI against it, asserts that each
@@ -15,8 +15,8 @@ Run it::
 
 What it demonstrates, in order:
 
-    1. discovery         -- the tool finds the 6 annotations across the tree
-    2. Option 3 coverage -- static AST scan -> annotation_coverage.md   (never imports)
+    1. discovery         -- the tool finds the 6 decorators across the tree
+    2. Option 3 coverage -- static AST scan -> decorator_coverage.md   (never imports)
     3. Option 2 stubs    -- pattern-based pytest scaffolds -> tests/
     4. pytest            -- the generated stubs collect and SKIP (nothing silently passes)
     5. Option 1 inspect  -- @functional review, verdicts -> inspection.yaml
@@ -40,15 +40,15 @@ import sys
 import tempfile
 from pathlib import Path
 
-# The annotations live on this branch, NOT on main. Cloning main yields a tree with
-# zero annotations and the demo would be vacuous, so pin it explicitly.
+# The decorators live on this branch, NOT on main. Cloning main yields a tree with
+# zero decorators and the demo would be vacuous, so pin it explicitly.
 DEFAULT_REPO = "git@github.com:juliandehne/lni_study.git"
 DEFAULT_BRANCH = "feat/rse-code-annotations"
 
 # rse_code_annotations repo root (this file lives in <root>/scripts/).
 PKG_ROOT = Path(__file__).resolve().parent.parent
 
-EXPECTED_ANNOTATIONS = 6  # 1 functional, 3 mapping, 1 data_input, 1 data_output
+EXPECTED_DECORATED = 6  # 1 functional, 3 mapping, 1 data_input, 1 data_output
 
 
 # --------------------------------------------------------------------------------
@@ -139,7 +139,7 @@ def main() -> int:
     ap.add_argument("--repo", default=DEFAULT_REPO,
                     help=f"clone source: URL or local path (default: {DEFAULT_REPO})")
     ap.add_argument("--branch", default=DEFAULT_BRANCH,
-                    help=f"branch carrying the annotations (default: {DEFAULT_BRANCH})")
+                    help=f"branch carrying the decorators (default: {DEFAULT_BRANCH})")
     ap.add_argument("--keep", action="store_true",
                     help="do not delete the clone at the end (for debugging)")
     args = ap.parse_args()
@@ -174,15 +174,15 @@ def main() -> int:
         head = subprocess.run(["git", "-C", str(clone), "rev-parse", "--short", "HEAD"],
                               capture_output=True, text=True).stdout.strip()
         r.check((clone / "src" / "compute_icr.py").is_file(),
-                "testbed has the annotated sources", f"HEAD={head}")
+                "testbed has the decorated sources", f"HEAD={head}")
 
         # ---- STEP 1: discovery ----------------------------------------------
         # No mode flag + no TTY: the menu hits EOF and quits, but the header still
         # prints the discovery summary, which is what we assert on.
-        r.step(1, "Discovery: find the annotations in the tree")
+        r.step(1, "Discovery: find the decorators in the tree")
         cp = run_cli(clone, stdin="")
-        found = f"Found {EXPECTED_ANNOTATIONS} annotation(s)"
-        ok = r.check(found in cp.stdout, f"discovered {EXPECTED_ANNOTATIONS} annotations")
+        found = f"Found {EXPECTED_DECORATED} decorated function(s)"
+        ok = r.check(found in cp.stdout, f"discovered {EXPECTED_DECORATED} decorators")
         for kind in ("functional", "mapping", "data_input", "data_output"):
             r.check(f"@{kind}" in cp.stdout, f"  kind present: @{kind}")
         if not ok:
@@ -190,11 +190,11 @@ def main() -> int:
             print(tail(cp.stderr))
 
         # ---- STEP 2: Option 3 -- coverage (static, never imports) -------------
-        r.step(2, "Option 3: annotation coverage + candidates (static AST scan)")
+        r.step(2, "Option 3: decorator coverage + candidates (static AST scan)")
         cp = run_cli(clone, "--coverage")
-        report = clone / "annotation_coverage.md"
+        report = clone / "decorator_coverage.md"
         r.check(cp.returncode == 0, "--coverage exited 0")
-        r.check(report.is_file(), "wrote annotation_coverage.md",
+        r.check(report.is_file(), "wrote decorator_coverage.md",
                 f"{report.stat().st_size} bytes" if report.is_file() else "MISSING")
         if report.is_file():
             body = report.read_text(encoding="utf-8", errors="replace")
@@ -207,7 +207,7 @@ def main() -> int:
         # The testbed already ships a handwritten tests/test_short_paper_cap.py, so
         # globbing tests/ would miscredit it to the generator. Assert on the files the
         # CLI actually reports writing instead.
-        r.step(3, "Option 2: generate pytest stubs for every annotation")
+        r.step(3, "Option 2: generate pytest stubs for every decorator")
         tests_dir = clone / "tests"
         before = set(tests_dir.glob("test_*.py")) if tests_dir.is_dir() else set()
         cp = run_cli(clone, "--stubs")
@@ -215,11 +215,11 @@ def main() -> int:
 
         written = [Path(ln.split("wrote ", 1)[1].split("  (")[0])
                    for ln in cp.stdout.splitlines() if ln.strip().startswith("wrote ")]
-        r.check(len(written) == 2, "generated a stub file per annotated module",
+        r.check(len(written) == 2, "generated a stub file per decorated module",
                 ", ".join(p.name for p in written) or "NONE")
         r.check(all(p.is_file() for p in written), "  the reported files exist on disk")
-        r.check(f"Generated {EXPECTED_ANNOTATIONS} stub(s)" in cp.stdout,
-                f"  one stub per annotation ({EXPECTED_ANNOTATIONS})")
+        r.check(f"Generated {EXPECTED_DECORATED} stub(s)" in cp.stdout,
+                f"  one stub per decorator ({EXPECTED_DECORATED})")
         if written:
             joined = "\n".join(p.read_text(encoding="utf-8", errors="replace") for p in written)
             r.check("pytest.skip" in joined,

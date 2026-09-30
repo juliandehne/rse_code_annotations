@@ -76,16 +76,16 @@ def _index(report):
     return {r.qualname: r for r in report.records}
 
 
-def test_scan_finds_existing_annotations_without_importing(tmp_path):
+def test_scan_finds_existing_decorators_without_importing(tmp_path):
     # numpy/pandas are NOT installed for this module and Path.read_text on a fake
     # file would explode -- but nothing is imported or executed, so it doesn't matter.
     _write(tmp_path, "sample.py", SAMPLE)
     report = scan_path(tmp_path)
     by_name = _index(report)
 
-    assert by_name["area"].kind == "functional"        # aliased import (functional as pure)
-    assert by_name["load"].kind == "data_input"        # called form with fields=
-    assert by_name["dump"].kind == "data_output"       # qualified @rse_annotations.data_output
+    assert by_name["area"].concern == "functional"        # aliased import (functional as pure)
+    assert by_name["load"].concern == "data_input"        # called form with fields=
+    assert by_name["dump"].concern == "data_output"       # qualified @rse_annotations.data_output
     assert report.counts_by_kind() == {
         "functional": 1, "mapping": 0, "data_input": 1, "data_output": 1,
     }
@@ -146,7 +146,7 @@ def test_dunders_and_nested_functions_are_not_eligible(tmp_path):
 def test_annotated_functions_are_never_candidates(tmp_path):
     _write(tmp_path, "sample.py", SAMPLE)
     report = scan_path(tmp_path)
-    assert not any(c.annotated for c in report.candidates)
+    assert not any(c.decorated for c in report.candidates)
     assert report.coverage == pytest.approx(3 / len(report.eligible))
 
 
@@ -214,11 +214,11 @@ def test_renderers_produce_the_table_and_the_worklist(tmp_path):
     report = scan_path(tmp_path)
 
     text = render_coverage_text(report)
-    assert "By annotation kind" in text
-    assert "@functional" in text and "Candidates for annotation" in text
+    assert "By review concern" in text
+    assert "@functional" in text and "Candidates for a decorator" in text
 
     md = render_coverage_markdown(report)
-    assert md.startswith("# Annotation coverage")
+    assert md.startswith("# Decorator coverage")
     assert "| `@data_output` |" in md
     assert "`normalise`" in md          # a candidate
     assert "`main`" in md               # listed under "Not candidates"
@@ -236,7 +236,7 @@ def test_cli_coverage_writes_a_report_without_importing(tmp_path):
     msgs = []
     rc = cli_main([str(tmp_path), "--coverage"], output_fn=msgs.append)
     assert rc == 0
-    out = tmp_path / "annotation_coverage.md"
+    out = tmp_path / "decorator_coverage.md"
     assert out.exists()
     assert "halve" in out.read_text(encoding="utf-8")
     # no import was attempted, so discovery never warned about the broken module
@@ -255,7 +255,7 @@ def test_plugin_menu_offers_coverage_as_extra_action(tmp_path):
         output_fn=lambda _m: None,
     )
     assert rc == 0
-    assert (tmp_path / "annotation_coverage.md").exists()
+    assert (tmp_path / "decorator_coverage.md").exists()
 
 
 # --------------------------------------------------------------------------- #
@@ -278,6 +278,24 @@ def test_the_hazard_axis_specialises_the_dataflow_one(tmp_path):
     assert HAZARD_PARENT["unit_of_analysis"] == "mapping"
     assert HAZARD_PARENT["external_tool"] is None         # the process itself is left
     assert set(HAZARD_PARENT) == set(HAZARDS)
+
+
+def test_every_decorator_has_a_concern_and_back():
+    """``HazardDecorator`` and ``DECORATORS`` must list the same names -- adding one needs both."""
+    from rse_annotations.decorators.markers import DECORATORS, HazardDecorator
+    assert {d.__name__ for d in DECORATORS} == {c.value for c in HazardDecorator}
+    assert f"@{HazardDecorator.DATA_INPUT}" == "@data_input"      # prints as text, not HazardDecorator.X
+
+
+def test_hazard_kinds_are_the_single_source_of_truth():
+    """The name-keyed tables are derived from ``HAZARD_KINDS``, never kept by hand."""
+    from rse_annotations.decorators.markers import HazardDecorator
+    from rse_annotations.scan import CRITICAL_HAZARDS, HAZARD_KINDS
+    assert HAZARDS == tuple(k.name for k in HAZARD_KINDS)
+    assert all(k.parent is None or isinstance(k.parent, HazardDecorator) for k in HAZARD_KINDS)
+    assert all(k.help for k in HAZARD_KINDS)
+    # every contagious hazard is also critical: provenance decides trust
+    assert {k.name for k in HAZARD_KINDS if k.contagious} <= set(CRITICAL_HAZARDS)
 
 
 def test_model_call_is_detected_and_is_not_called_no_io(tmp_path):
@@ -595,7 +613,7 @@ def test_hazards_propagate_to_callers_as_indirect(tmp_path):
 
 def test_annotated_functions_are_still_screened_for_hazards(tmp_path):
     """The two axes are orthogonal: carrying @mapping does not exempt you."""
-    _write(tmp_path, "annotated.py", """
+    _write(tmp_path, "decorated.py", """
         import krippendorff
         from rse_annotations import mapping
 
@@ -604,7 +622,7 @@ def test_annotated_functions_are_still_screened_for_hazards(tmp_path):
             return krippendorff.alpha(reliability_data=[a, b])
     """)
     rec = _index(scan_path(tmp_path))["compute_dimension_icr"]
-    assert rec.annotated and rec.kind == "mapping"
+    assert rec.decorated and rec.concern == "mapping"
     assert "statistical" in rec.hazard_kinds
 
 

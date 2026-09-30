@@ -1,6 +1,6 @@
 """Test generation and differential verification behind classes.
 
-* :class:`TestGenerator` -- pattern-based ``pytest`` scaffolds for every annotation
+* :class:`TestGenerator` -- pattern-based ``pytest`` scaffolds for every decorator
   of a target (no LLM). Override :meth:`TestGenerator.stub_files` to change how
   stubs are made.
 * :class:`DifferentialVerifier` -- run a ``@functional`` against a trusted reference
@@ -27,19 +27,19 @@ class TestGenerator:
 
     def stub_files(self) -> List[StubFile]:
         """The files that would be written; nothing touches the disk."""
-        return generate_stub_files(self.target.annotations(), self.out_dir)
+        return generate_stub_files(self.target.decorated(), self.out_dir)
 
     def write(self, output_fn: Callable[[str], None] = print) -> List[StubFile]:
         """Write the scaffolds and report each file through ``output_fn``."""
         files = self.stub_files()
         if not files:
-            output_fn("No annotations found; nothing to scaffold.")
+            output_fn("No decorators found; nothing to scaffold.")
             return files
         self.out_dir.mkdir(parents=True, exist_ok=True)
         written = 0
         for sf in files:
             sf.path.write_text(sf.content, encoding="utf-8")
-            output_fn(f"  wrote {sf.path}  ({sf.stub_count} annotation(s) from {sf.source_module})")
+            output_fn(f"  wrote {sf.path}  ({sf.stub_count} decorated function(s) from {sf.source_module})")
             written += sf.stub_count
         output_fn("")
         output_fn(f"Generated {written} stub(s) across {len(files)} file(s) in {self.out_dir}")

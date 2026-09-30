@@ -18,11 +18,11 @@ class ResearchSecurity(HazardStub):
     ``yaml.load`` without SafeLoader / ``np.load(allow_pickle=True)`` on ``@data_input``
     paths; ``subprocess(..., shell=True)`` or concatenated argv in external-tool code;
     ``eval`` / ``exec`` on anything reachable from a model-call return value;
-    ``verify=False`` on downloads. Filter Bandit (B301/B506/B602/B307/B501) to annotated
+    ``verify=False`` on downloads. Filter Bandit (B301/B506/B602/B307/B501) to decorated
     or hazardous code so output stays short. Known-vulnerable dependencies via
     osv-scanner with a pre-fetched offline DB (otherwise a ``ci`` check).
     Difficulty: 2/5 (~2 h/week) -- Bandit and osv-scanner do the detection; the work is
-      filtering to annotated/hazardous code and a few own AST patterns.
+      filtering to decorated/hazardous code and a few own AST patterns.
     EVERSE: indicators ``static_analysis_common_vulnerabilities``,
       ``no_critical_vulnerability``, ``no_leaked_credentials`` (security); RSQKit
       https://everse.software/RSQKit/research_software_security (recommends Bandit,
