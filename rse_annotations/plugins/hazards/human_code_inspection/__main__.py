@@ -1,7 +1,7 @@
 """``python -m rse_annotations.plugins.hazards.human_code_inspection [path]``
 
 The plugin's own entry point: human inspection, hazard analysis, test generation,
-plus the static decorator-coverage report (``--coverage``, never imports the target).
+the external review, plus the static decorator-coverage report (``--coverage``, never imports the target).
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ import sys
 from typing import Optional
 
 from ....cli import plugin_main
+from ....manager import suggest_decorators
 from ....reporting import write_coverage_report
 from .plugin import HumanCodeInspection
 
@@ -21,8 +22,7 @@ def _coverage(plugin, target, output_fn) -> int:
 def _nothing_annotated(plugin, target, output_fn) -> Optional[int]:
     if target.static_scan().decorated:
         return None
-    output_fn("No decorators yet. Here is where they would go (coverage scan of the same tree):")
-    return write_coverage_report(target, output_fn)
+    return suggest_decorators(target, output_fn)
 
 
 EXTRA_ACTIONS = {"coverage": ("Decorator coverage + candidates  (-> decorator_coverage.md)",

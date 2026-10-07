@@ -6,15 +6,22 @@ tool delegates to every plugin that offers it::
     1) Human inspection   -- a person reviews flagged code, verdicts are recorded
     2) Hazard analysis    -- every plugin examines the code and reports findings
     3) Test generation    -- plugins write test scaffolds
+    4) External review    -- an outside reviewer inspects the marked code; writes a protocol
 
-If more than one plugin offers the chosen mode (inspection, test generation) you are
+If more than one plugin offers the chosen mode (inspection, test generation, review) you are
 asked which; ``--plugin NAME`` picks directly. Skip the menu with ``--inspect``,
-``--analyze`` or ``--tests``::
+``--analyze``, ``--tests`` or ``--review``::
 
     python -m rse_annotations src --analyze --only human_code_inspection -v
     python -m rse_annotations src --analyze --format json > audit.json
     python -m rse_annotations --list
     python -m rse_annotations src --coverage     # static; never imports the code
+    python -m rse_annotations src --review       # interactive, static; writes review_protocol.yaml
+
+The program flow itself -- what each mode does -- is in the start file of that mode
+(:mod:`rse_annotations.start_inspection`, ``.start_review``, ``.start_analysis``,
+``.start_test_generation``), each of which can also be run directly; this module only
+parses the command line, shows the menus and calls them (:func:`run_mode`).
 
 **Per-plugin entry point** -- ``python -m rse_annotations.plugins.hazards.<name>``
 offers only that plugin's modes (plus any extra actions it adds, e.g. the coverage
@@ -27,26 +34,29 @@ from __future__ import annotations
 
 import argparse
 import sys
-from pathlib import Path
-from typing import Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, Iterable, Optional, Tuple, Union
 
-from .decorators.markers import REVIEW_CONCERNS
-from .core.audit import Audit
 from .core.catalog import PluginCatalog, default_catalog
-from .core.plugin import MODE_LABELS, MODES, Plugin
-from .core.target import TargetProject, is_url
-from .reporting import RENDERERS, TextRenderer, write_coverage_report
+from .core.plugin import MODES, Mode, Plugin
+from .core.target import TargetProject
+from .reporting import OutputFormat
+from .manager import (InputFn, Manager, OutputFn, add_output_args, add_path_arg,
+                      add_plugin_args, choose, list_plugins, plugin_names)
+from .start_analysis import hazard_analysis
+from .start_inspection import human_inspection
+from .start_review import external_review
+from .start_test_generation import test_generation
 
-InputFn = Callable[[str], str]
-OutputFn = Callable[[str], None]
 #: An extra per-plugin action: ``(menu label, fn(plugin, target, output_fn) -> exit code)``.
 ExtraAction = Tuple[str, Callable[[Plugin, TargetProject, OutputFn], int]]
 
-_MODE_FLAGS = {"inspect": "inspect", "analyze": "analyze", "tests": "generate_tests"}
+_MODE_FLAGS = {"inspect": Mode.INSPECT, "analyze": Mode.ANALYZE, "tests": Mode.GENERATE_TESTS,
+               "review": Mode.REVIEW}
 _MODE_HINTS = {
-    "inspect": "a person reviews flagged code; verdicts are recorded",
-    "analyze": "every plugin examines the code and reports findings",
-    "generate_tests": "write test scaffolds",
+    Mode.INSPECT: "a person reviews flagged code; verdicts are recorded",
+    Mode.ANALYZE: "every plugin examines the code and reports findings",
+    Mode.GENERATE_TESTS: "write test scaffolds",
+    Mode.REVIEW: "an outside reviewer inspects the marked code; writes a protocol",
 }
 
 
@@ -54,99 +64,37 @@ _MODE_HINTS = {
 # Shared helpers
 # --------------------------------------------------------------------------- #
 
-def _target(spec: str, output_fn: OutputFn) -> Optional[TargetProject]:
-    if is_url(spec):
-        return TargetProject.from_url(spec)
-    path = Path(spec).resolve()
-    if not path.is_dir():
-        output_fn(f"error: {path} is not a directory")
-        return None
-    return TargetProject.from_path(path)
-
-
-def _header(target: TargetProject, output_fn: OutputFn) -> int:
-    """Print what the static scan found (no import); return the decorator count."""
-    counts = target.static_scan().counts_by_kind()
-    total = sum(counts.values())
-    parts = [f"{counts[k]} @{k}" for k in REVIEW_CONCERNS if counts.get(k)]
-    output_fn(f"Scanned {target.root}")
-    output_fn(f"Found {total} decorated function(s): {', '.join(parts) if parts else 'none'}")
-    return total
-
-
-def _menu(options: Sequence[Tuple[str, str]], input_fn: InputFn, output_fn: OutputFn,
-          title: str) -> Optional[str]:
-    """Numbered menu over ``(key, label)`` pairs; returns a key, or None to quit."""
-    output_fn("")
-    output_fn(title)
-    for i, (_, label) in enumerate(options, start=1):
-        output_fn(f"  {i}) {label}")
-    keys = {str(i): key for i, (key, _) in enumerate(options, start=1)}
-    keys.update({key: key for key, _ in options})
-    while True:
-        try:
-            choice = input_fn("> ").strip().lower()
-        except EOFError:
-            return None
-        if choice in keys:
-            return keys[choice]
-        if choice in ("q", "quit", "", "exit"):
-            return None
-        output_fn(f"  please enter 1-{len(options)} (or q to quit)")
-
-
-def _add_output_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--format", choices=sorted(RENDERERS), default="text",
-                        help="with --analyze: output format (default: text)")
-    parser.add_argument("-v", "--verbose", action="store_true",
-                        help="with --analyze: also show info findings")
-
-
 def _add_mode_args(group) -> None:
     group.add_argument("--inspect", action="store_true", help="human inspection (skip the menu)")
     group.add_argument("--analyze", action="store_true", help="hazard analysis (skip the menu)")
     group.add_argument("--tests", "--stubs", dest="tests", action="store_true",
                        help="test generation (skip the menu)")
+    group.add_argument("--review", action="store_true",
+                       help="external review (skip the menu; -> review_protocol.yaml)")
 
 
-def _mode_from_args(args) -> Optional[str]:
+def _mode_from_args(args) -> Optional[Mode]:
     for flag, mode in _MODE_FLAGS.items():
         if getattr(args, flag, False):
             return mode
     return None
 
 
-def _analyze(audit: Audit, plugins: List[Plugin], fmt: str, verbose: bool,
-             output_fn: OutputFn) -> int:
-    results = [audit.run_one(p) for p in plugins]
-    renderer = TextRenderer(verbose=verbose) if fmt == "text" else RENDERERS[fmt]()
-    output_fn(renderer.render_results(results))
-    return 0 if all(r.ok for r in results) else 1
-
-
-def _run(plugin: Plugin, mode: str, target: TargetProject, input_fn: InputFn,
-         output_fn: OutputFn) -> int:
-    if not plugin.available():
-        output_fn(f"{plugin.name}: {plugin.unavailable_reason()}")
-        return 1
-    if mode == "inspect":
-        plugin.inspect(target, input_fn=input_fn, output_fn=output_fn)
-    else:
-        plugin.generate_tests(target, output_fn=output_fn)
-    return 0
-
-
-def list_plugins(catalog: PluginCatalog, output_fn: OutputFn) -> int:
-    for cls in catalog.classes():
-        state = cls.when if cls().available() else f"{cls.when}, not available"
-        tier = getattr(cls, "tier", None)
-        if tier:
-            state += f", tier {tier}"
-        modes = "/".join(m.replace("generate_tests", "tests") for m in cls.modes())
-        output_fn(f"  {cls.name:<24} [{state}] ({modes})  {cls.description}")
-    for ep, err in catalog.errors:
-        output_fn(f"  (plugin {ep} failed to load: {err})")
-    return 0
+def run_mode(manager: Manager, mode: Mode, plugin: Union[str, Plugin, None] = None, *,
+             only: Optional[Iterable[str]] = None, fmt: OutputFormat = OutputFormat.TEXT,
+             verbose: bool = False) -> int:
+    """Call the feature named by ``mode``."""
+    if mode is Mode.INSPECT:
+        return human_inspection(manager, plugin)
+    if mode is Mode.REVIEW:
+        return external_review(manager, plugin)
+    if mode is Mode.GENERATE_TESTS:
+        return test_generation(manager, plugin)
+    if isinstance(plugin, Plugin):
+        only = [plugin.name]
+    elif plugin:
+        only = [plugin]
+    return hazard_analysis(manager, only, fmt=fmt, verbose=verbose)
 
 
 # --------------------------------------------------------------------------- #
@@ -157,78 +105,41 @@ def main(argv: Optional[list] = None, *, input_fn: InputFn = input,
          output_fn: OutputFn = print, catalog: Optional[PluginCatalog] = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m rse_annotations", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("path", nargs="?", default=".",
-                        help="directory or git URL of code to check (default: current directory)")
+    add_path_arg(parser)
     mode = parser.add_mutually_exclusive_group()
     _add_mode_args(mode)
     mode.add_argument("--list", "--list-plugins", dest="list", action="store_true",
                       help="list the plugins and the modes they offer, then exit")
     mode.add_argument("--coverage", action="store_true",
                       help="static decorator coverage + candidates (-> decorator_coverage.md)")
-    parser.add_argument("--plugin", default=None,
-                        help="the plugin to use for --inspect / --tests")
-    parser.add_argument("--only", default=None,
-                        help="with --analyze: comma-separated plugin names (default: all)")
-    _add_output_args(parser)
+    add_plugin_args(parser)
+    add_output_args(parser)
     args = parser.parse_args(argv)
 
     catalog = catalog if catalog is not None else default_catalog()
     if args.list:
         return list_plugins(catalog, output_fn)
 
-    target = _target(args.path, output_fn)
-    if target is None:
+    manager = Manager.for_path(args.path, catalog=catalog, input_fn=input_fn,
+                               output_fn=output_fn)
+    if manager is None:
         return 2
-    audit = Audit(target, catalog=catalog)
     if args.coverage:
-        return write_coverage_report(target, output_fn)
+        return manager.coverage()
 
     chosen = _mode_from_args(args)
     if chosen is None:
-        if not _header(target, output_fn):
-            output_fn("No decorators yet. Here is where they would go "
-                      "(coverage scan of the same tree):")
-            return write_coverage_report(target, output_fn)
-        options = [(m, f"{MODE_LABELS[m]:<17} -- {_MODE_HINTS[m]}")
-                   for m in ("inspect", "analyze", "generate_tests") if catalog.for_mode(m)]
-        chosen = _menu(options, input_fn, output_fn, "Choose a mode:")
+        if not manager.summary():
+            return manager.suggest_decorators()
+        options = [(m, f"{m.label:<17} -- {_MODE_HINTS[m]}")
+                   for m in MODES if catalog.for_mode(m)]
+        chosen = choose(options, input_fn, output_fn, "Choose a mode:")
         if chosen is None:
             output_fn("No mode chosen.")
             return 0
 
-    if chosen == "analyze":
-        names = [n.strip() for n in args.only.split(",")] if args.only else None
-        if args.plugin:
-            names = [args.plugin]
-        try:
-            plugins = audit.select(names)
-        except KeyError as exc:
-            output_fn(f"error: {exc.args[0]}")
-            return 2
-        return _analyze(audit, plugins, args.format, args.verbose, output_fn)
-
-    offering = [c for c in catalog.for_mode(chosen)]
-    if args.plugin:
-        if args.plugin not in catalog:
-            output_fn(f"error: unknown plugin {args.plugin!r}")
-            return 2
-        cls = catalog.get(args.plugin)
-        if not cls.supports(chosen):
-            output_fn(f"error: {cls.name} does not offer {MODE_LABELS[chosen].lower()}")
-            return 2
-    elif not offering:
-        output_fn(f"No plugin offers {MODE_LABELS[chosen].lower()}.")
-        return 1
-    elif len(offering) == 1:
-        cls = offering[0]
-    else:
-        name = _menu([(c.name, f"{c.name} -- {c.description}") for c in offering],
-                     input_fn, output_fn, f"{MODE_LABELS[chosen]} with which plugin?")
-        if name is None:
-            output_fn("No plugin chosen.")
-            return 0
-        cls = catalog.get(name)
-    return _run(audit.plugin(cls.name), chosen, target, input_fn, output_fn)
+    return run_mode(manager, chosen, args.plugin, only=plugin_names(args.only),
+                    fmt=args.format, verbose=args.verbose)
 
 
 # --------------------------------------------------------------------------- #
@@ -253,30 +164,31 @@ def plugin_main(plugin_factory: Callable[[], Plugin], argv: Optional[list] = Non
     extra_actions = dict(extra_actions or {})
     parser = argparse.ArgumentParser(prog=f"python -m ...{plugin.name}",
                                      description=type(plugin).__doc__)
-    parser.add_argument("path", nargs="?", default=".",
-                        help="directory or git URL of code to check (default: current directory)")
+    add_path_arg(parser)
     group = parser.add_mutually_exclusive_group()
     _add_mode_args(group)
     for flag, (label, _) in extra_actions.items():
         group.add_argument(f"--{flag}", dest=f"extra_{flag}", action="store_true", help=label)
-    _add_output_args(parser)
+    add_output_args(parser)
     args = parser.parse_args(argv)
 
-    target = _target(args.path, output_fn)
-    if target is None:
+    manager = Manager.for_path(args.path, catalog=PluginCatalog(), plugins=[plugin],
+                               input_fn=input_fn, output_fn=output_fn)
+    if manager is None:
         return 2
+    target = manager.target
 
     chosen = _mode_from_args(args) or next(
         (f for f in extra_actions if getattr(args, f"extra_{f}")), None)
     if chosen is None:
-        _header(target, output_fn)
+        manager.summary()
         if before_menu is not None:
             code = before_menu(plugin, target, output_fn)
             if code is not None:
                 return code
-        options = [(m, MODE_LABELS[m]) for m in MODES if plugin.supports(m)]
+        options = [(m, m.label) for m in MODES if plugin.supports(m)]
         options += [(flag, label) for flag, (label, _) in extra_actions.items()]
-        chosen = _menu(options, input_fn, output_fn, f"{plugin.name}: choose an action:")
+        chosen = choose(options, input_fn, output_fn, f"{plugin.name}: choose an action:")
         if chosen is None:
             output_fn("No action chosen.")
             return 0
@@ -284,12 +196,9 @@ def plugin_main(plugin_factory: Callable[[], Plugin], argv: Optional[list] = Non
     if chosen in extra_actions:
         return extra_actions[chosen][1](plugin, target, output_fn)
     if not plugin.supports(chosen):
-        output_fn(f"error: {plugin.name} does not offer {MODE_LABELS[chosen].lower()}")
+        output_fn(f"error: {plugin.name} does not offer {chosen.label.lower()}")
         return 2
-    if chosen == "analyze":
-        return _analyze(Audit(target, catalog=PluginCatalog(), plugins=[plugin]), [plugin],
-                        args.format, args.verbose, output_fn)
-    return _run(plugin, chosen, target, input_fn, output_fn)
+    return run_mode(manager, chosen, plugin, fmt=args.format, verbose=args.verbose)
 
 
 if __name__ == "__main__":

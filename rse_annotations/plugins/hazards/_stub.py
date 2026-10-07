@@ -24,7 +24,7 @@ How to implement one (course task)
    :mod:`rse_annotations.testing`). The general entry point offers your plugin in every
    mode it implements.
 4. Keep ``name``, ``when``, ``description`` and ``question``; drop the stub-only
-   attributes if you like. A ``when = "runtime"`` hazard (energy, inference counts) reads
+   attributes if you like. A ``when = Phase.RUNTIME`` hazard (energy, inference counts) reads
    a ledger recorded while the code ran -- see ``ideas/RUNTIME_HAZARDS.md``.
 5. If you need an optional dependency, override ``available()`` to return False when it
    is missing and ``unavailable_reason()`` to say what to ``pip install``.

@@ -9,11 +9,24 @@ schema it owns with a hand-rolled emitter/parser -- not a general YAML library.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Callable, Dict, Iterable, List, Tuple
 
-VERDICTS = ("accepted", "declined", "pending")
+from ..textenum import TextEnum
+
+
+class Decision(TextEnum):
+    """What a reviewer decided about one piece of code."""
+
+    ACCEPTED = "accepted"
+    DECLINED = "declined"
+    PENDING = "pending"   # not decided yet (skipped)
+
+
+#: Every :class:`Decision`, in reporting order.
+VERDICTS = tuple(Decision)
 
 #: The file name, written next to the inspected code.
 VERDICT_FILE = "inspection.yaml"
@@ -25,13 +38,47 @@ class Verdict:
     location: str
     concern: str
     formula: str
-    verdict: str  # one of VERDICTS
+    verdict: Decision
     note: str = ""
+
+
+def count_verdicts(items: Iterable) -> Dict[Decision, int]:
+    """How often each :class:`Decision` was taken in ``items`` (anything with a ``.verdict``)."""
+    items = list(items)
+    return {d: sum(1 for item in items if item.verdict == d) for d in Decision}
+
+
+def verdict_summary(items: Iterable) -> str:
+    """The closing line of a review, e.g. ``"3 accepted, 0 declined, 1 pending."``."""
+    return ", ".join(f"{n} {d}" for d, n in count_verdicts(items).items()) + "."
 
 
 # --------------------------------------------------------------------------- #
 # Minimal YAML I/O for our own fixed schema (list of flat string records)
 # --------------------------------------------------------------------------- #
+
+def same_file(a: str, b: str) -> bool:
+    return os.path.normcase(os.path.abspath(a)) == os.path.normcase(os.path.abspath(b))
+
+
+def ask_verdict(prompt: str, default: Decision, input_fn: Callable[[str], str],
+                output_fn: Callable[[str], None]) -> Decision:
+    """One accept/decline/skip answer; EOF or empty input keeps ``default``."""
+    while True:
+        try:
+            answer = input_fn(prompt).strip().lower()
+        except EOFError:
+            return default
+        if answer == "":
+            return default
+        if answer in ("y", "yes"):
+            return Decision.ACCEPTED
+        if answer in ("n", "no"):
+            return Decision.DECLINED
+        if answer in ("s", "skip"):
+            return Decision.PENDING
+        output_fn("  please answer y, n, or s")
+
 
 def _yq(value: str) -> str:
     """Double-quote and escape a scalar string for our YAML subset."""
@@ -83,7 +130,7 @@ def load_yaml(path: Path) -> List[Verdict]:
                 location=current.get("location", ""),
                 concern=current.get("concern", current.get("kind", "")),
                 formula=current.get("formula", ""),
-                verdict=current.get("verdict", "pending"),
+                verdict=current.get("verdict", Decision.PENDING),
                 note=current.get("note", ""),
             ))
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Callable, List, Optional
 
 from .formula import infer_formula
-from .verdicts import VERDICTS, Verdict, VerdictStore
+from .verdicts import VERDICTS, Decision, Verdict, VerdictStore, ask_verdict, verdict_summary
 from ..decorators.registry import DecoratorInfo
 from .snippets import extract_snippet
 from ..decorators.markers import HazardDecorator
@@ -53,13 +53,11 @@ class Reviewer:
             self.present(info, formula, prior, idx, len(functional))
             verdicts.append(Verdict(
                 function=info.name, location=info.location, concern=info.concern,
-                formula=formula, verdict=self.ask(prior.verdict if prior else "pending")))
+                formula=formula, verdict=self.ask(prior.verdict if prior else Decision.PENDING)))
 
         self.store.save(verdicts)
-        counts = {k: sum(1 for v in verdicts if v.verdict == k) for k in VERDICTS}
         out("")
-        out(f"Recorded {len(verdicts)} verdict(s): {counts['accepted']} accepted, "
-            f"{counts['declined']} declined, {counts['pending']} pending.")
+        out(f"Recorded {len(verdicts)} verdict(s): {verdict_summary(verdicts)}")
         out(f"Written to {self.store.path}")
         return verdicts
 
@@ -85,19 +83,6 @@ class Reviewer:
         for src_line in extract_snippet(info).source.splitlines():
             out(f"    {src_line}")
 
-    def ask(self, default: str) -> str:
+    def ask(self, default: Decision) -> Decision:
         """One accept/decline/skip answer; EOF or empty input keeps ``default``."""
-        while True:
-            try:
-                answer = self.input_fn(self.prompt).strip().lower()
-            except EOFError:
-                return default
-            if answer == "":
-                return default
-            if answer in ("y", "yes"):
-                return "accepted"
-            if answer in ("n", "no"):
-                return "declined"
-            if answer in ("s", "skip"):
-                return "pending"
-            self.output_fn("  please answer y, n, or s")
+        return ask_verdict(self.prompt, default, self.input_fn, self.output_fn)

@@ -8,6 +8,7 @@ working plugin.
 
 from __future__ import annotations
 
+from ....core.plugin import Phase
 from .._stub import HazardStub
 
 
@@ -29,7 +30,7 @@ class ComputeFootprint(HazardStub):
     name = "footprint"
     description = "CO2e estimate and disclosure, incl. remote LLM calls"
     question = "is it inclusive and sustainable?"
-    when = "runtime"
+    when = Phase.RUNTIME
     tier, effort, proposal = "B", "S", "RESPONSIBLE_RSE_PLUGINS.md §2.12"
     difficulty = 2
     hooks = ("model_call", "run")

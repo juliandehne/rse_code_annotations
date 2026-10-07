@@ -23,14 +23,15 @@ from typing import Callable, Dict, List, Optional, Union
 from .decorators.registry import DecoratorInfo
 from .core.audit import Audit, AuditReport
 from .core.catalog import PluginCatalog
+from .core.findings import Severity, Status
 from .core.target import TargetProject
 from .plugins.hazards.human_code_inspection import checks as _checks
 from .inspection.formula import FormulaResult, render_formula
 from .inspection.snippets import Snippet, extract_snippet
-from .plugins.hazards.human_code_inspection import HumanCodeInspection
+from .plugins.hazards.human_code_inspection import Facet, HumanCodeInspection
 from .decorators.markers import HazardDecorator
 
-_STATUS = {"info": "pass", "warn": "warn", "fail": "fail"}
+_STATUS = {Severity.INFO: Status.PASS, Severity.WARN: Status.WARN, Severity.FAIL: Status.FAIL}
 #: The order the per-function checks are reported in.
 _ORDER = {"placement": 0, "docstring": 1, "io_success": 2}
 
@@ -44,12 +45,12 @@ class FunctionReport:
     checks: List[_checks.CheckResult] = field(default_factory=list)
 
     @property
-    def status(self) -> str:
-        if any(c.status == "fail" for c in self.checks):
-            return "fail"
-        if any(c.status == "warn" for c in self.checks):
-            return "warn"
-        return "pass"
+    def status(self) -> Status:
+        if any(c.status == Status.FAIL for c in self.checks):
+            return Status.FAIL
+        if any(c.status == Status.WARN for c in self.checks):
+            return Status.WARN
+        return Status.PASS
 
 
 @dataclass
@@ -83,14 +84,14 @@ class Report:
     # ---- aggregate accessors ------------------------------------------- #
     @property
     def counts(self) -> Dict[str, int]:
-        c = {"pass": 0, "warn": 0, "fail": 0}
+        c = {Status.PASS: 0, Status.WARN: 0, Status.FAIL: 0}
         for fr in self.functions:
             c[fr.status] += 1
         return c
 
     @property
     def ok(self) -> bool:
-        return all(fr.status != "fail" for fr in self.functions)
+        return all(fr.status != Status.FAIL for fr in self.functions)
 
     def to_dict(self) -> dict:
         return {
@@ -148,7 +149,7 @@ class Runner:
         self.infer_formulas = infer_formulas
 
     def audit(self) -> Audit:
-        facets = ["conventions", "io"] + (["math"] if self.infer_formulas else [])
+        facets = [Facet.CONVENTIONS, Facet.IO] + ([Facet.MATH] if self.infer_formulas else [])
         plugin = HumanCodeInspection(facets, fixtures=self.fixtures)
         return Audit(TargetProject.from_modules(self.targets), catalog=PluginCatalog(),
                      plugins=[plugin])
@@ -162,19 +163,16 @@ class Runner:
 # Human-readable rendering
 # --------------------------------------------------------------------------- #
 
-_ICON = {"pass": "PASS", "warn": "WARN", "fail": "FAIL"}
-
-
 def render_text(report: Report, *, show_snippets: bool = True) -> str:
     lines: List[str] = []
     c = report.counts
-    lines.append(f"rse_code_annotations report -- {c['pass']} pass, "
-                 f"{c['warn']} warn, {c['fail']} fail\n")
+    lines.append(f"rse_code_annotations report -- {c[Status.PASS]} pass, "
+                 f"{c[Status.WARN]} warn, {c[Status.FAIL]} fail\n")
 
     for fr in report.functions:
-        lines.append(f"[{_ICON[fr.status]}] @{fr.concern} {fr.name}  ({fr.location})")
+        lines.append(f"[{fr.status.mark}] @{fr.concern} {fr.name}  ({fr.location})")
         for chk in fr.checks:
-            lines.append(f"    - {_ICON[chk.status]} {chk.name}: {chk.message}")
+            lines.append(f"    - {chk.status.mark} {chk.name}: {chk.message}")
         lines.append("")
 
     # Functional review section

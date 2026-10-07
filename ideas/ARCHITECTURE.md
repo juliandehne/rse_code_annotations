@@ -20,7 +20,7 @@ rse_annotations/
 │   └── hazards/
 │       ├── human_code_inspection/   the worked example: plugin.py, checks.py, __main__.py
 │       ├── _stub.py                 HazardStub (base for the course tasks)
-│       └── licence/ … footprint/    15 Responsible-RSE stubs, one folder each
+│       └── licence/ … footprint/    16 Responsible-RSE stubs, one folder each
 ├── cli.py           the general entry point + plugin_main() for per-plugin entry points
 ├── __main__.py      python -m rse_annotations
 └── legacy.py        deprecated Runner / Report (per-function view)
@@ -45,7 +45,7 @@ flowchart TB
 
     subgraph pl["plugins/hazards"]
         hci["human_code_inspection<br/>HumanCodeInspection, checks"]
-        stubs["_stub + 15 folders<br/>HazardStub subclasses"]
+        stubs["_stub + 16 folders<br/>HazardStub subclasses"]
     end
 
     subgraph core["core"]
@@ -257,7 +257,7 @@ shows it; `python -m rse_annotations src --analyze --only todo_count` runs it.
 
 ## 6. Responsible-RSE stubs (course tasks)
 
-`plugins/hazards/<name>/` holds 15 stubs from `RESPONSIBLE_RSE_PLUGINS.md`. They are listed by
+`plugins/hazards/<name>/` holds 16 stubs from `RESPONSIBLE_RSE_PLUGINS.md`. They are listed by
 `--list` and *skipped* in every analysis until implemented. Each docstring is the task spec; `_stub.py`
 explains how to turn one into a working plugin.
 
@@ -268,6 +268,7 @@ explains how to turn one into a working plugin.
 | are the results trustworthy? | `silent_failures`, `constants`, `llm_disclosure` | A | static | 2, 2, 2 |
 | | `leakage` | B | static | 4 |
 | | `inference_ledger` | B | runtime | 5 |
+| | `llm_evaluation` | B | static | 3 |
 | can it harm? | `security` | A | static | 2 |
 | | `purpose_retention` | B | static | 3 |
 | | `dual_use` | C | static | 2 |

@@ -8,6 +8,7 @@ working plugin.
 
 from __future__ import annotations
 
+from ....core.plugin import Phase
 from .._stub import HazardStub
 
 
@@ -29,7 +30,7 @@ class Fairness(HazardStub):
     name = "fairness"
     description = "per-group error / selection rates for declared sensitive attributes"
     question = "is it inclusive and sustainable?"
-    when = "test"
+    when = Phase.TEST
     tier, effort, proposal = "B", "M", "RESPONSIBLE_RSE_PLUGINS.md §2.9"
     difficulty = 3
     hooks = ("statistical", "model_call", "@data_output")

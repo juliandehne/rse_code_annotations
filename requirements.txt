@@ -7,3 +7,4 @@ pytest>=7
 # optional: the documentation-coverage plugin exercise (examples/plugin_template)
 # . -e
 # -e examples/plugin_template
+tensorflow

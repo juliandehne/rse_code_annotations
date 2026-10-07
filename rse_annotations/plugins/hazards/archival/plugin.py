@@ -8,6 +8,7 @@ working plugin.
 
 from __future__ import annotations
 
+from ....core.plugin import Phase
 from .._stub import HazardStub
 
 
@@ -33,7 +34,7 @@ class ArchivalSustainability(HazardStub):
     name = "archival"
     description = "citable, archived, identifiable release; maintenance risk"
     question = "may the code and its data be reused -- and found again?"
-    when = "static"
+    when = Phase.STATIC
     tier, effort, proposal = "C", "S–M", "RESPONSIBLE_RSE_PLUGINS.md §2.13"
     difficulty = 3
     hooks = ("project", "@external_tool")

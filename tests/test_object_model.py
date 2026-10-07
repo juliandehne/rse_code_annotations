@@ -137,7 +137,7 @@ def test_unknown_plugin_name_is_a_clear_error():
 
 def test_stubs_are_well_formed_and_unique():
     names = [c.name for c in RESPONSIBLE_HAZARDS]
-    assert len(names) == len(set(names)) == 15
+    assert len(names) == len(set(names)) == 16
     for cls in RESPONSIBLE_HAZARDS:
         assert issubclass(cls, HazardStub)
         assert cls.when in PHASES
@@ -149,7 +149,7 @@ def test_stubs_are_well_formed_and_unique():
 def test_stubs_are_skipped_not_failed(tmp_path):
     report = Audit(TargetProject.from_path(tmp_path),
                    catalog=PluginCatalog(RESPONSIBLE_HAZARDS)).run()
-    assert len(report.results) == 15
+    assert len(report.results) == 16
     assert all(r.status == "skipped" and "student task" in r.skipped for r in report.results)
     assert report.ok
 
@@ -257,7 +257,7 @@ def test_cli_list_plugins(flag):
     assert main([flag], output_fn=msgs.append) == 0
     blob = "\n".join(msgs)
     assert "human_code_inspection" in blob and "dual_use" in blob and "tier A" in blob
-    assert "inspect/analyze/tests" in blob
+    assert "inspect/analyze/tests/review" in blob
 
 
 def test_cli_analyze_json(tmp_path):

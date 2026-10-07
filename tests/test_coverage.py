@@ -248,8 +248,8 @@ def test_plugin_menu_offers_coverage_as_extra_action(tmp_path):
     from rse_annotations.plugins.hazards.human_code_inspection.__main__ import main as cli_main
 
     _write(tmp_path, "sample.py", SAMPLE)
-    # 1) inspect 2) analyze 3) tests 4) coverage
-    answers = iter(["4"])
+    # 1) inspect 2) analyze 3) tests 4) review 5) coverage
+    answers = iter(["5"])
     rc = cli_main(
         [str(tmp_path)],
         input_fn=lambda _p: next(answers),

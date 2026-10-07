@@ -66,13 +66,14 @@ def _param_names(info: DecoratorInfo) -> List[str]:
             if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY)]
 
 
-def _fields_comment(info: DecoratorInfo) -> List[str]:
+def _fields_block(info: DecoratorInfo) -> str:
+    """The declared fields as comment lines (each ending in a newline); "" if none."""
     if not info.fields:
-        return []
+        return ""
     lines = ["    # Declared fields:"]
     for key, desc in info.fields.items():
         lines.append(f"    #   - {key}: {desc}")
-    return lines
+    return "\n".join(lines) + "\n"
 
 
 def _functional_stub(info: DecoratorInfo) -> str:
@@ -105,8 +106,7 @@ def _functional_stub(info: DecoratorInfo) -> str:
 
 def _mapping_stub(info: DecoratorInfo) -> str:
     name = info.name
-    fields = "\n".join(_fields_comment(info))
-    fields = (fields + "\n") if fields else ""
+    fields = _fields_block(info)
     return (
         f"def test_{name}_transforms_shape():\n"
         f'    """@mapping: transforms one in-memory shape/format into another."""\n'
@@ -120,8 +120,7 @@ def _mapping_stub(info: DecoratorInfo) -> str:
 
 def _data_input_stub(info: DecoratorInfo) -> str:
     name = info.name
-    fields = "\n".join(_fields_comment(info))
-    fields = (fields + "\n") if fields else ""
+    fields = _fields_block(info)
     return (
         f"def test_{name}_reads_source(tmp_path):\n"
         f'    """@data_input: reads data from a file/source into memory."""\n'
@@ -136,8 +135,7 @@ def _data_input_stub(info: DecoratorInfo) -> str:
 
 def _data_output_stub(info: DecoratorInfo) -> str:
     name = info.name
-    fields = "\n".join(_fields_comment(info))
-    fields = (fields + "\n") if fields else ""
+    fields = _fields_block(info)
     return (
         f"def test_{name}_writes_sink(tmp_path):\n"
         f'    """@data_output: writes in-memory data out to a file/sink."""\n'

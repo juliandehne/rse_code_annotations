@@ -37,6 +37,7 @@ network-dependent part is `when="ci"` only, so the default run stays offline and
 | 13 | `ArchivalSustainabilityAnalyzer` | static + ci | cited version not archived/identifiable (SWHID, DOI↔tag mismatch); truck factor; OpenSSF Scorecard | swh.model `swh identify` (offline, GPL-3.0), truckfactor (offline, GPL-3.0), Scorecard (network, Apache-2.0) | project; `@external_tool` | S–M | **C** |
 | 14 | `InclusiveLanguageAnalyzer` | static | non-inclusive terms in identifiers/docs; binary-only or deficit-framed categories in codebooks | woke (Go CLI, MIT), alex (Node, MIT), own list | `@human_input` codebooks, all docs | S | **C** |
 | 15 | `DualUseScreeningAnalyzer` | static | prompts a human screen when code touches dual-use or AI-Act high-risk areas (crypto, intrusion, surveillance, biometrics, pathogen design) | none fit → own keyword/import map; verdict in `inspection.yaml` | project; `@model_call`, `@data_input` | S | **C** |
+| 16 | `LLMEvaluationAnalyzer` | static | LLM step inside the pipeline (not generated code) whose output is used without an evaluation, or evaluated with a metric that does not fit the problem type | own AST; metric calls from scikit-learn (BSD-3), evaluate (Apache-2.0), sacrebleu (Apache-2.0); metric map from Hou et al. 2024 | `@model_call`, `@human_input` | M | **B** |
 
 Tier A: cheap, static, offline, high signal and directly tied to existing hazards. Tier B:
 more value but needs a runtime hook, a declared attribute, or domain calibration. Tier C:
@@ -66,6 +67,7 @@ tests*. The EVERSE mapping (dimensions, indicators, RSQKit tasks, gap ideas) is 
 | 13 | `ArchivalSustainabilityAnalyzer` | [archived_in_software_heritage](https://w3id.org/everse/i/indicators/archived_in_software_heritage), [RSQKit archiving](https://everse.software/RSQKit/archiving_software) | 3 | several sub-checks + network mocking |
 | 14 | `InclusiveLanguageAnalyzer` | dim. [community](https://w3id.org/everse/i/dimensions/community) | 1 | rules file, `info` only |
 | 15 | `DualUseScreeningAnalyzer` | dim. [safety](https://w3id.org/everse/i/dimensions/safety) | 2 | code is small; the keyword map is the work |
+| 16 | `LLMEvaluationAnalyzer` | [functional_correctness](https://w3id.org/everse/i/indicators/functional_correctness) (adjacent; EVERSE gap) | 3 | metric map given; the work is following a model-call output to a metric call |
 
 ## 2. Plugins
 
@@ -256,6 +258,41 @@ record a verdict in `inspection.yaml`: "not listed", "basic scientific research"
 domain" (the Regulation's exemptions), or "needs export-control review". Grounding:
 EU Recommendation 2021/1700 on research ICPs. Keeping it as a human verdict avoids pretending
 a regex can make a legal call.
+
+### 2.16 `LLMEvaluationAnalyzer` (static, M, Tier B)
+
+**Scope.** An LLM as *part of the computation* of the research software: it classifies,
+extracts, ranks, scores or generates on the way to a result. This is a different topic
+from LLM-generated source code (covered by `human_code_inspection`) and from disclosure
+(§2.4, which asks whether the LLM use *can be reported*). This plugin asks **how the LLM
+step was evaluated**.
+
+**Detects** per `@model_call` site, after establishing the problem type of the step
+(declared, e.g. `problem_type="classification"`, or asked in an inspection): output
+reaches a `@data_output` or a `@statistical` function with no evaluation metric on the
+path; a metric from the wrong family for the problem type; `accuracy` as the only metric
+of a classification step (blind to class imbalance); only lexical overlap (BLEU, ROUGE)
+for a generation step, with no execution-based (Pass@k) or human check; a metric computed
+without a human-labelled reference (no `@human_input` on the path); a metric computed but
+never written to an output.
+
+**Metric map (starting point).** Evaluation metrics reported per problem type in the
+LLM4SE literature, with the number of studies, from Hou et al. (2024), *Large Language
+Models for Software Engineering: A Systematic Literature Review*, ACM TOSEM 33(8),
+doi:10.1145/3695988. It shows what is customary in software engineering, not what is
+correct in every discipline; the plugin should load the map from a rules file.
+
+| Problem type | Metrics (studies) | Total |
+|---|---|---|
+| Regression | MAE (1) | 1 |
+| Classification | Precision (35), Recall (34), F1-score (33), Accuracy (23), AUC (9), ROC (4), FPR (4), FNR (3), MCC (2) | 147 |
+| Recommendation | MRR (15), Precision/Precision@k (6), MAP/MAP@k (6), F-score/F-score@k (5), Recall/Recall@k (4), Accuracy (3) | 39 |
+| Generation | BLEU/BLEU-4/BLEU-DC (62), Pass@k (54), Accuracy/Accuracy@k (39), EM (36), CodeBLEU (29), ROUGE/ROUGE-L (22), Precision (18), METEOR (16), Recall (15), F1-score (15), MRR (6), ES (6), ED (5), MAR (4), ChrF (3), CrystalBLEU (3), CodeBERTScore (2), MFR (1), PP (1) | 338 |
+
+**Output.** Per LLM step: problem type, metrics found, reference data used, and a
+finding where one of the above is missing. **Open question for the student:** which
+metric families count as fitting outside SE (e.g. agreement coefficients for LLM-coded
+qualitative data), and how to cite the evidence for that choice.
 
 ## 3. How they fit the existing model
 

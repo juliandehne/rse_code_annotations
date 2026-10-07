@@ -15,7 +15,7 @@ from __future__ import annotations
 from importlib import metadata
 from typing import Dict, Iterable, List, Optional, Tuple, Type
 
-from .plugin import MODES, PHASES, Plugin
+from .plugin import MODES, PHASES, Mode, Phase, Plugin
 
 ENTRY_POINT_GROUP = "rse_annotations.plugins"
 
@@ -37,9 +37,9 @@ class PluginCatalog:
         if not cls.name:
             raise ValueError(f"{cls.__name__} has no name")
         if cls.when not in PHASES:
-            raise ValueError(f"{cls.__name__}.when must be one of {PHASES}")
+            raise ValueError(f"{cls.__name__}.when must be one of {', '.join(PHASES)}")
         if not cls.modes():
-            raise ValueError(f"{cls.__name__} implements none of {MODES}")
+            raise ValueError(f"{cls.__name__} implements none of {', '.join(MODES)}")
         self._classes[cls.name] = cls
         return cls
 
@@ -70,8 +70,8 @@ class PluginCatalog:
         return [c for c in self._classes.values() if c.supports(mode)]
 
     def create(self, names: Optional[Iterable[str]] = None, *,
-               when: Optional[Iterable[str]] = None,
-               mode: Optional[str] = None) -> List[Plugin]:
+               when: Optional[Iterable[Phase]] = None,
+               mode: Optional[Mode] = None) -> List[Plugin]:
         """Instantiate the selected plugins (all, by default) with default settings."""
         chosen = [self.get(n) for n in names] if names else self.classes()
         return [cls() for cls in filter_plugins(chosen, when=when, mode=mode)]
@@ -83,8 +83,8 @@ class PluginCatalog:
         return len(self._classes)
 
 
-def filter_plugins(plugins, *, when: Optional[Iterable[str]] = None,
-                   mode: Optional[str] = None) -> list:
+def filter_plugins(plugins, *, when: Optional[Iterable[Phase]] = None,
+                   mode: Optional[Mode] = None) -> list:
     """Keep the plugins (classes or instances) that run in one of ``when`` and offer ``mode``."""
     if mode is not None:
         plugins = [p for p in plugins if p.supports(mode)]

@@ -18,8 +18,8 @@ from dataclasses import dataclass, field
 from typing import Iterable, List, Optional
 
 from .catalog import PluginCatalog, default_catalog, filter_plugins
-from .findings import AnalysisResult, Finding
-from .plugin import Plugin
+from .findings import AnalysisResult, Finding, Severity
+from .plugin import Mode, Phase, Plugin
 from .target import TargetProject
 
 
@@ -62,8 +62,8 @@ class Audit:
         self.plugins = plugins
 
     def select(self, only: Optional[Iterable[str]] = None,
-               when: Optional[Iterable[str]] = None,
-               mode: Optional[str] = "analyze") -> List[Plugin]:
+               when: Optional[Iterable[Phase]] = None,
+               mode: Optional[Mode] = Mode.ANALYZE) -> List[Plugin]:
         """The plugin instances to use, filtered by name, phase and mode."""
         if self.plugins is None:
             return self.catalog.create(only, when=when, mode=mode)
@@ -79,7 +79,7 @@ class Audit:
         return self.catalog.get(name)()
 
     def run(self, only: Optional[Iterable[str]] = None,
-            when: Optional[Iterable[str]] = None) -> AuditReport:
+            when: Optional[Iterable[Phase]] = None) -> AuditReport:
         """Hazard analysis with every selected plugin. Unavailable plugins are reported
         as skipped; a plugin that crashes yields one ``fail`` finding instead of aborting."""
         report = AuditReport(self.target.name)
@@ -93,5 +93,5 @@ class Audit:
         try:
             return plugin.analyze(self.target)
         except Exception as exc:  # noqa: BLE001 - one broken plugin must not stop the audit
-            return plugin.result([Finding("plugin_error", "fail",
+            return plugin.result([Finding("plugin_error", Severity.FAIL,
                                           f"{type(exc).__name__}: {exc}")])

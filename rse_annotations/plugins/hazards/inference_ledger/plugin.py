@@ -8,6 +8,7 @@ working plugin.
 
 from __future__ import annotations
 
+from ....core.plugin import Phase
 from .._stub import HazardStub
 
 
@@ -31,7 +32,7 @@ class InferenceLedger(HazardStub):
     name = "inference_ledger"
     description = "all hypothesis tests actually run vs. those corrected and reported"
     question = "is the work fair to the evidence and honest about it?"
-    when = "runtime"
+    when = Phase.RUNTIME
     tier, effort, proposal = "B", "M", "RESPONSIBLE_RSE_PLUGINS.md §2.8"
     difficulty = 5
     hooks = ("statistical",)

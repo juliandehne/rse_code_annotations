@@ -11,8 +11,37 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
 
-#: Ordered from harmless to blocking.
-SEVERITIES = ("info", "warn", "fail")
+from ..textenum import TextEnum
+
+
+class Severity(TextEnum):
+    """How bad one :class:`Finding` is, ordered from harmless to blocking."""
+
+    INFO = "info"
+    WARN = "warn"
+    FAIL = "fail"
+
+
+class Status(TextEnum):
+    """The outcome of one plugin (:attr:`AnalysisResult.status`) or one check."""
+
+    PASS = "pass"
+    WARN = "warn"
+    FAIL = "fail"
+    SKIPPED = "skipped"
+
+    @property
+    def mark(self) -> str:
+        """The four-letter mark shown in text reports, e.g. ``"PASS"``."""
+        return STATUS_MARKS[self]
+
+
+#: Every :class:`Severity`, ordered from harmless to blocking.
+SEVERITIES = tuple(Severity)
+
+#: How a :class:`Status` is shown in text reports.
+STATUS_MARKS = {Status.PASS: "PASS", Status.WARN: "WARN", Status.FAIL: "FAIL",
+                Status.SKIPPED: "SKIP"}
 
 
 @dataclass
@@ -21,7 +50,7 @@ class Finding:
 
     Attributes:
         rule: Short identifier of what was checked, e.g. ``"placement"``, ``"hazard.stochastic"``.
-        severity: One of :data:`SEVERITIES`.
+        severity: A :class:`Severity` (the plain string, e.g. ``"warn"``, is accepted too).
         message: Human-readable explanation.
         function: Qualified name of the function concerned, if any.
         location: ``file:line`` of the evidence, if any.
@@ -29,7 +58,7 @@ class Finding:
     """
 
     rule: str
-    severity: str
+    severity: Severity
     message: str
     function: Optional[str] = None
     location: Optional[str] = None
@@ -37,7 +66,9 @@ class Finding:
 
     def __post_init__(self) -> None:
         if self.severity not in SEVERITIES:
-            raise ValueError(f"severity must be one of {SEVERITIES}, got {self.severity!r}")
+            raise ValueError(f"severity must be one of {', '.join(SEVERITIES)}, "
+                             f"got {self.severity!r}")
+        self.severity = Severity(self.severity)
 
 
 @dataclass
@@ -57,22 +88,22 @@ class AnalysisResult:
     skipped: Optional[str] = None
 
     @property
-    def status(self) -> str:
+    def status(self) -> Status:
         """``skipped``, ``fail``, ``warn`` or ``pass`` (worst finding wins)."""
         if self.skipped:
-            return "skipped"
+            return Status.SKIPPED
         severities = {f.severity for f in self.findings}
-        if "fail" in severities:
-            return "fail"
-        if "warn" in severities:
-            return "warn"
-        return "pass"
+        if Severity.FAIL in severities:
+            return Status.FAIL
+        if Severity.WARN in severities:
+            return Status.WARN
+        return Status.PASS
 
     @property
     def ok(self) -> bool:
-        return self.status != "fail"
+        return self.status != Status.FAIL
 
-    def count(self, severity: str) -> int:
+    def count(self, severity: Severity) -> int:
         return sum(1 for f in self.findings if f.severity == severity)
 
     def to_dict(self) -> dict:

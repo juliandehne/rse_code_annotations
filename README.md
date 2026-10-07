@@ -39,6 +39,11 @@ So mark that subset, and spend the entire inspection budget on it:
 5. **See what you have *not* looked at** — the coverage report contrasts what is
    decorated with what, by the shape of its body, should be. An inspection whose
    blind spots are invisible is indistinguishable from no inspection at all.
+6. **Hand it over** — the same filter serves an outside reviewer (a journal editor,
+   someone reproducing the result). The external review steps them through the marked
+   snippets only, not the whole repository, tells them per concern what to look for —
+   including what the reproducibility of the result hinges on — and records a signed
+   protocol.
 
 The deliberate limits matter as much as the features. There is no LLM and no network
 anywhere in the tool: you do not audit generated code with another generator. The
@@ -90,6 +95,9 @@ def load_csv(path):
 | `@mapping`     | transforms one format/object into another      | shape-transform test stub |
 | `@data_input`  | boundary where data enters (reads a file)      | tmp-file read test stub |
 | `@data_output` | boundary where data leaves (writes a file)     | tmp-file write test stub |
+| `@hardware_dependency` | result depends on the hardware (e.g. a GPU) | points the external review at code that decides reproducibility |
+
+The set is open: more decorators will follow.
 
 In code, the decorator names are also the members of the `HazardDecorator` enum
 (`HazardDecorator.FUNCTIONAL == "functional"`). A new decorator is one function in
@@ -99,9 +107,9 @@ and the exports are derived from it.
 ## The tool
 
 Everything that *checks* something is a **plugin** under
-`rse_annotations/plugins/hazards/<name>/`. A plugin offers up to three **modes**:
-*human inspection*, *hazard analysis* and *test generation*. The worked example is
-`human_code_inspection` (all three modes); the Responsible-RSE hazards (`licence`,
+`rse_annotations/plugins/hazards/<name>/`. A plugin offers one or more **modes**:
+*human inspection*, *hazard analysis*, *test generation* and the *external review*. The
+worked example is `human_code_inspection` (every mode); the Responsible-RSE hazards (`licence`,
 `dual_use`, `footprint`, …) are stubs that offer hazard analysis only.
 
 There are two entry points. The **general** one asks for a mode and delegates to
@@ -121,6 +129,7 @@ Choose a mode:
   1) Human inspection  -- a person reviews flagged code; verdicts are recorded
   2) Hazard analysis   -- every plugin examines the code and reports findings
   3) Test generation   -- write test scaffolds
+  4) External review   -- an outside reviewer inspects the marked code; writes a protocol
 ```
 
 The **per-plugin** entry point offers only that plugin's modes plus its extra
@@ -135,10 +144,11 @@ human_code_inspection: choose an action:
   1) Human inspection
   2) Hazard analysis
   3) Test generation
-  4) Decorator coverage + candidates  (-> decorator_coverage.md)
+  4) External review
+  5) Decorator coverage + candidates  (-> decorator_coverage.md)
 ```
 
-What the three modes and the coverage action do for `human_code_inspection`:
+What the modes and the coverage action do for `human_code_inspection`:
 
 **Human inspection — review `@functional` decorators.** Each `@functional` snippet is
 shown one at a time with its source and the **inferred formula**, then you accept
@@ -157,6 +167,26 @@ it in. Files are written to `<root>/tests/test_<module>.py` (Python convention).
 **Hazard analysis.** Reports findings per facet: decorator coverage, reproducibility
 hazards, `@functional`s without an accepted verdict (static), and conventions, the
 inferred formulas and real I/O of the boundaries (these import the code).
+
+**External review — an outside reviewer inspects the marked code.** Human inspection
+is the *author* checking their own code. The external review is the same kind of
+session for someone else: a journal editor (a JOSS review, say) or a person reproducing
+the result. The marks do the same job in both: they are a **filter** that cuts the code
+a human has to read down to the part that matters. The reviewer does not read the
+repository; it walks through every marked snippet of **every** concern, concern by
+concern. Each concern opens with the question to answer (the decorator's docstring);
+each snippet is shown with the authors' `fields=` notes, their own verdict where one is
+recorded, the hazards the scan found in the body and the source. The reviewer answers
+`[y]es / [n]o / [s]kip` and may add a note. A mark such as `@hardware_dependency` is
+not documentation of the hardware: it tells the reviewer which snippet to read when
+judging whether the result can be reproduced on other hardware.
+
+The answers are written to `<root>/review_protocol.yaml`: reviewer, date, the scope
+(how much of the code is marked — what is not marked was not reviewed) and one finding
+per snippet. It is a separate file from the authors' `inspection.yaml`, and a re-run
+pre-fills the previous answers, so a second review round only touches what changed. The
+session is **static**: nothing is imported or run, so the reviewer needs neither the
+authors' dependencies nor their GPU.
 
 **Decorator coverage.** Inspection and test generation act on what *is* decorated.
 Coverage answers the prior question: **how much of this codebase is decorated at all,
@@ -212,9 +242,51 @@ python -m rse_annotations src --inspect        # human inspection
 python -m rse_annotations src --analyze        # hazard analysis, all plugins
 python -m rse_annotations src --analyze --only human_code_inspection --format json
 python -m rse_annotations src --tests          # test generation (alias: --stubs)
+python -m rse_annotations src --review         # external review (never imports)
 python -m rse_annotations src --coverage       # coverage report (never imports)
 python -m rse_annotations --list               # plugins and the modes they offer
 ```
+
+Each feature also has its own start file, which skips the menu. They can be run with
+`-m` or directly as a file (e.g. the IDE's "Run" button):
+
+```bash
+python -m rse_annotations.start_inspection src         # human inspection
+python -m rse_annotations.start_review src             # external review
+python -m rse_annotations.start_analysis src           # hazard analysis
+python -m rse_annotations.start_test_generation src    # test generation
+```
+
+To follow the program flow of a feature, read its start file: each one holds the
+function that does the work (`human_inspection`, `external_review`, `hazard_analysis`,
+`test_generation`) and a `main` that calls it. `rse_annotations/manager.py` holds what
+they share: the `Manager` (the code to check, the plugins, how to talk to the user).
+`cli.py` only parses arguments, shows the menu and calls the same functions.
+
+They can also be used from your own script or a notebook:
+
+```python
+from rse_annotations.manager import Manager
+from rse_annotations.start_analysis import hazard_analysis
+from rse_annotations.start_inspection import human_inspection
+from rse_annotations.start_review import external_review
+from rse_annotations.start_test_generation import test_generation
+
+manager = Manager.for_path("src")      # a directory or a git URL; None if it is neither
+
+manager.summary()                      # what the static scan found (imports nothing)
+manager.coverage()                     # -> decorator_coverage.md
+
+human_inspection(manager)              # a person reviews the flagged code
+external_review(manager)               # an outside reviewer; -> review_protocol.yaml
+test_generation(manager)               # write test scaffolds
+exit_code = hazard_analysis(manager, only=["human_code_inspection"], verbose=True)
+```
+
+Every feature function returns an exit code (0 = fine, 1 = findings or not possible
+here, 2 = wrong input). The two reviews and the test generation take an optional
+plugin name, e.g. `human_inspection(manager, "human_code_inspection")`; without it
+you are asked which plugin to use if several offer the feature.
 
 `--analyze` exits non-zero when a plugin reports a `fail`, so it can gate CI. New
 plugins subclass `rse_annotations.Plugin` and are committed to this project: one folder

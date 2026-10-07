@@ -29,7 +29,7 @@ exported from :mod:`rse_annotations` and recognised by the scanner.
 from __future__ import annotations
 
 import inspect
-from enum import Enum
+from ..textenum import TextEnum
 from typing import Callable, Dict, List, Optional
 
 from .registry import REGISTRY, build_info
@@ -96,10 +96,10 @@ def data_output(fn=None, *, fields=None):
 
 @_concern
 def hardware_dependency(fn=None, *, fields=None):
-    """Marks code that needs specific hardware to run or to give the same result (e.g. a GPU).
+    """Marks code whose result depends on the hardware it runs on (e.g. a GPU).
 
-    Review whether the hardware is stated in the paper/README and whether a CPU fallback
-    changes the result (precision, non-deterministic kernels).
+    Review for reproducibility: does the result survive other hardware, or does a
+    different device or a CPU fallback change it (precision, non-deterministic kernels)?
     """
     return _mark(hardware_dependency, fn, fields)
 
@@ -113,15 +113,10 @@ def decorator_of(func: Callable):
 DECORATORS = tuple(_DEFINED)
 
 
-class _ConcernEnum(str, Enum):
-    def __str__(self) -> str:   # "functional", not "HazardDecorator.FUNCTIONAL" (also in f-strings)
-        return self.value
-
-
 #: The review concerns as an enum, one member per decorator, named like it
 #: (``HazardDecorator.FUNCTIONAL == "functional"``). A ``str`` subclass, so it is written
 #: to YAML/JSON as plain text.
-HazardDecorator = _ConcernEnum(
+HazardDecorator = TextEnum(
     "HazardDecorator", [(d.__name__.upper(), d.__name__) for d in DECORATORS], module=__name__)
 HazardDecorator.__doc__ = "The review concerns: kinds of code where the scientific result can go wrong."
 

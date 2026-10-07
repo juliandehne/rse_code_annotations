@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Sequence
+from typing import List, Optional, Sequence
 
 from .coverage import render_coverage_markdown
-from ..core.findings import SEVERITIES, AnalysisResult
-from ..inspection.verdicts import VERDICTS, Verdict
+from ..core.findings import SEVERITIES, AnalysisResult, Severity, Status
+from ..inspection.verdicts import Verdict, count_verdicts, verdict_summary
+from ..textenum import TextEnum
 from ..scan.model import CoverageReport
 
 def _coverage_of(data) -> Optional[CoverageReport]:
@@ -25,11 +26,12 @@ def _coverage_of(data) -> Optional[CoverageReport]:
     return None
 
 
-_MARK = {"pass": "PASS", "warn": "WARN", "fail": "FAIL", "skipped": "SKIP"}
+class OutputFormat(TextEnum):
+    """The formats a report can be written in; :data:`RENDERERS` has one renderer each."""
 
-
-def _verdict_counts(verdicts: Sequence[Verdict]) -> Dict[str, int]:
-    return {k: sum(1 for v in verdicts if v.verdict == k) for k in VERDICTS}
+    TEXT = "text"
+    MARKDOWN = "markdown"
+    JSON = "json"
 
 
 class Renderer(ABC):
@@ -56,18 +58,18 @@ class TextRenderer(Renderer):
     def render_results(self, results: Sequence[AnalysisResult]) -> str:
         lines: List[str] = []
         for r in results:
-            head = f"[{_MARK[r.status]}] {r.plugin}"
+            head = f"[{r.status.mark}] {r.plugin}"
             if r.skipped:
                 lines.append(f"{head}: {r.skipped}")
                 continue
             counts = ", ".join(f"{r.count(s)} {s}" for s in SEVERITIES if r.count(s))
             lines.append(f"{head}: {counts or 'no findings'}")
             for f in r.findings:
-                if f.severity == "info" and not self.verbose:
+                if f.severity == Severity.INFO and not self.verbose:
                     continue
                 where = f"  {f.function}" if f.function else ""
                 lines.append(f"    {f.severity:<4} {f.rule}{where}: {f.message}")
-        failed = sum(1 for r in results if r.status == "fail")
+        failed = sum(1 for r in results if r.status == Status.FAIL)
         lines.append("")
         lines.append(f"{len(results)} plugin(s) run, {failed} failed.")
         return "\n".join(lines)
@@ -77,9 +79,7 @@ class TextRenderer(Renderer):
             return "No verdicts recorded."
         lines = [f"{v.verdict:<9} {v.function}   ({v.location})\n          {v.formula}"
                  for v in verdicts]
-        c = _verdict_counts(verdicts)
-        lines.append(f"{len(verdicts)} verdict(s): {c['accepted']} accepted, "
-                     f"{c['declined']} declined, {c['pending']} pending.")
+        lines.append(f"{len(verdicts)} verdict(s): {verdict_summary(verdicts)}")
         return "\n".join(lines)
 
 
@@ -97,8 +97,8 @@ class MarkdownRenderer(Renderer):
         parts = ["# Audit report", "",
                  "| Plugin | Status | fail | warn | info |", "|---|---|---:|---:|---:|"]
         for r in results:
-            parts.append(f"| {r.plugin} | {r.status} | {r.count('fail')} | "
-                         f"{r.count('warn')} | {r.count('info')} |")
+            parts.append(f"| {r.plugin} | {r.status} | {r.count(Severity.FAIL)} | "
+                         f"{r.count(Severity.WARN)} | {r.count(Severity.INFO)} |")
         for r in results:
             parts += ["", f"## {r.plugin}", ""]
             if r.skipped:
@@ -122,9 +122,7 @@ class MarkdownRenderer(Renderer):
         for v in verdicts:
             formula = v.formula.replace("|", "\\|")
             parts.append(f"| `{v.function}` | {v.location} | `{formula}` | {v.verdict} |")
-        c = _verdict_counts(verdicts)
-        parts += ["", f"{len(verdicts)} verdict(s): {c['accepted']} accepted, "
-                      f"{c['declined']} declined, {c['pending']} pending."]
+        parts += ["", f"{len(verdicts)} verdict(s): {verdict_summary(verdicts)}"]
         return "\n".join(parts) + "\n"
 
 
@@ -141,8 +139,10 @@ class JsonRenderer(Renderer):
                            "results": [r.to_dict() for r in results]}, indent=self.indent)
 
     def render_verdicts(self, verdicts: Sequence[Verdict]) -> str:
-        return json.dumps({"summary": _verdict_counts(verdicts),
+        return json.dumps({"summary": count_verdicts(verdicts),
                            "verdicts": [vars(v) for v in verdicts]}, indent=self.indent)
 
 
-RENDERERS = {"text": TextRenderer, "markdown": MarkdownRenderer, "json": JsonRenderer}
+#: The renderer class of every :class:`OutputFormat`.
+RENDERERS = {OutputFormat.TEXT: TextRenderer, OutputFormat.MARKDOWN: MarkdownRenderer,
+             OutputFormat.JSON: JsonRenderer}
