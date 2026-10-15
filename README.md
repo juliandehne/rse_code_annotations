@@ -7,9 +7,9 @@ which functions carry a concern you have not marked, and an interactive review l
 someone check the marked ones.
 
 ```python
-from rse_annotations import functional, model_call
+from rse_annotations import calculations, model_call
 
-@functional
+@calculations
 def scale(x, k):
     return x * k
 

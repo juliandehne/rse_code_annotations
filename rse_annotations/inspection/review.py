@@ -39,7 +39,7 @@ def review(root, concern: Optional[str] = None, input_fn: Callable[[str], str] =
     todo = [(r, k) for r in records for k in r.marked if concern in (None, k)]
     results = []
     for i, (rec, k) in enumerate(todo, 1):
-        v = vs.Verdict(rec.qualname, rec.location, k, formula(rec.source) if k == "functional" else "")
+        v = vs.Verdict(rec.qualname, rec.location, k, formula(rec.source) if k == "calculations" else "")
         if (prev := old.get(v.key)):
             v.verdict, v.note = prev.verdict, prev.note
         output_fn(f"\n[{i}/{len(todo)}] @{k}  {rec.qualname}  ({rec.location})")

@@ -29,7 +29,7 @@ GENERIC_IO = {"write", "read", "writelines", "readline", "readlines"}
 class Concern:
     """One concern: its name, the reviewer's question, and its detector.
 
-    The instance *is* the decorator: ``@functional`` and ``@functional(fields=...)``
+    The instance *is* the decorator: ``@calculations`` and ``@calculations(fields=...)``
     both record the concern on the function and return it unchanged.
 
     ``critical`` concerns decide whether a result can be trusted and regenerated.

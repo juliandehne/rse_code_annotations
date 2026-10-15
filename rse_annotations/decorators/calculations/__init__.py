@@ -1,4 +1,4 @@
-"""@functional: a pure mathematical function (deterministic, no I/O, no globals)."""
+"""@calculations: a pure mathematical function (deterministic, no I/O, no globals)."""
 from .._base import Concern
 
 # Calls that keep a function pure.
@@ -20,6 +20,6 @@ def detect(v):
 
 
 CONCERN = Concern(
-    "functional",
+    "calculations",
     "Is this a pure function whose formula matches the method described in the paper?",
     detect)

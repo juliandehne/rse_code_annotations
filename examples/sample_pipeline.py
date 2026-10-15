@@ -13,12 +13,12 @@ import csv
 import json
 from typing import Dict, List
 
-from rse_annotations import data_input, data_output, functional, mapping
+from rse_annotations import data_input, data_output, calculations, mapping
 
 
-# --- @functional: pure maths, no I/O  --------------- #
+# --- @calculations: pure maths, no I/O  --------------- #
 
-@functional
+@calculations
 def normalize(value: float, lo: float, hi: float) -> float:
     """Scale ``value`` into the unit interval given range [lo, hi].
 
@@ -30,7 +30,7 @@ def normalize(value: float, lo: float, hi: float) -> float:
     return (value - lo) / (hi - lo)
 
 
-@functional
+@calculations
 def mean(values: List[float]) -> float:
     """Arithmetic mean of a non-empty sequence.
 
@@ -40,9 +40,9 @@ def mean(values: List[float]) -> float:
     return sum(values) / len(values)
 
 
-# --- @functional that WRONGLY does I/O (analysis: marked but not detected) ------------- #
+# --- @calculations that WRONGLY does I/O (analysis: marked but not detected) ------------- #
 
-@functional
+@calculations
 def impure_sum(path: str) -> float:
     """A deliberately mis-decorated function: reads a file, so not pure."""
     with open(path) as fh:

@@ -1,8 +1,8 @@
 """Concern decorators for generated research code, plus a static analysis and a review runner.
 
-    from rse_annotations import functional, data_input
+    from rse_annotations import calculations, data_input
 
-    @functional
+    @calculations
     def normalize(x, lo, hi):
         return (x - lo) / (hi - lo)
 """

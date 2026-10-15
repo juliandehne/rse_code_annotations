@@ -60,11 +60,11 @@ column.
 
 ```bash
 python -m rse_annotations /tmp/target --inspect
-python -m rse_annotations /tmp/target --inspect --concern functional
+python -m rse_annotations /tmp/target --inspect --concern calculations
 ```
 
 For every marked (function, concern) pair the runner shows the source, a formula (for
-`@functional` functions that are a single `return`) and the reviewer question. Answer
+`@calculations` functions that are a single `return`) and the reviewer question. Answer
 `y` (accepted), `n` (declined) or `s` (skip, stays pending). After each answer the
 verdicts are saved to `inspection.yaml` in the target directory. A later run pre-fills
 them, so pressing Enter keeps the previous answer.

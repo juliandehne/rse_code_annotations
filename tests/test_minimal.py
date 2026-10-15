@@ -1,7 +1,7 @@
 import json
 import textwrap
 
-from rse_annotations import CONCERNS, functional, mapping
+from rse_annotations import CONCERNS, calculations, mapping
 from rse_annotations.__main__ import main
 from rse_annotations.analysis import scan
 from rse_annotations.inspection import formula, review
@@ -9,13 +9,13 @@ from rse_annotations.inspection.verdicts import Verdict, dump, load
 
 CODE = textwrap.dedent('''
     import random
-    from rse_annotations import functional, model_call
+    from rse_annotations import calculations, model_call
 
-    @functional
+    @calculations
     def scale(x, k):
         return x * k
 
-    @functional
+    @calculations
     def leaky(path):
         return open(path).read()
 
@@ -34,7 +34,7 @@ def _write(tmp_path):
 
 
 def test_decorators_mark_and_return_the_function():
-    @functional
+    @calculations
     def f(x):
         return x
 
@@ -43,20 +43,20 @@ def test_decorators_mark_and_return_the_function():
         return x
 
     assert f(2) == 2 and g(3) == 3
-    assert f.__rse_concerns__ == (("functional", {}),)
+    assert f.__rse_concerns__ == (("calculations", {}),)
     assert g.__rse_concerns__ == (("mapping", {"fields": {"x": "in"}}),)
 
 
 def test_every_concern_is_a_folder_with_help_and_detector():
-    assert {"functional", "data_input", "model_call", "stochastic"} <= set(CONCERNS)
+    assert {"calculations", "data_input", "model_call", "stochastic"} <= set(CONCERNS)
     for c in CONCERNS.values():
         assert c.help and callable(c.detect)
 
 
 def test_scan_marks_detection_and_propagation(tmp_path):
     recs = {r.qualname: r for r in scan(_write(tmp_path))[0]}
-    assert recs["scale"].marked == ["functional"] and "functional" in recs["scale"].detected
-    assert "functional" not in recs["leaky"].detected          # marked but not detected
+    assert recs["scale"].marked == ["calculations"] and "calculations" in recs["scale"].detected
+    assert "calculations" not in recs["leaky"].detected          # marked but not detected
     assert recs["ask"].detected["model_call"].confidence == "high"
     run = recs["run"].detected
     assert run["model_call"].indirect and "no seed" in run["stochastic"].reason
@@ -87,7 +87,7 @@ def test_review_saves_and_prefills(tmp_path):
 
 
 def test_yaml_round_trip(tmp_path):
-    v = Verdict("f", 'a "b"\\c.py:1', "functional", "f(...) = x", "accepted", "ok")
+    v = Verdict("f", 'a "b"\\c.py:1', "calculations", "f(...) = x", "accepted", "ok")
     (tmp_path / "i.yaml").write_text(dump([v]), encoding="utf-8")
     assert load(tmp_path / "i.yaml") == [v]
 

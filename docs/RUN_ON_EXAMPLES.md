@@ -3,10 +3,10 @@
 `examples/` is a small, fully marked project:
 
 - `sample_pipeline.py`: a load → transform → aggregate → write pipeline with
-  `@data_input`, `@mapping`, `@functional` and `@data_output`.
+  `@data_input`, `@mapping`, `@calculations` and `@data_output`.
 - `gpu_tensors.py`: one `@hardware_dependency` function (TensorFlow on `/GPU:0`).
 
-One mark is deliberately wrong: `impure_sum` is marked `@functional`, but it reads a
+One mark is deliberately wrong: `impure_sum` is marked `@calculations`, but it reads a
 file.
 
 ## Analysis
@@ -28,11 +28,11 @@ hardware_dependency          1         1         0
 (* critical)
 
 Marked but not detected (check the mark or the code):
-  sample_pipeline.py:46  impure_sum  @functional
+  sample_pipeline.py:46  impure_sum  @calculations
 ```
 
 The scan confirms every other mark. It flags `impure_sum` because a function that does
-I/O cannot be `functional`. `unmarked` counts functions that look like they carry a
+I/O is not a pure `@calculations` function. `unmarked` counts functions that look like they carry a
 concern that is not marked. They are listed with `--json`:
 
 ```bash
@@ -43,11 +43,11 @@ python -m rse_annotations examples --json
 
 ```bash
 python -m rse_annotations examples --inspect
-python -m rse_annotations examples --inspect --concern functional
+python -m rse_annotations examples --inspect --concern calculations
 ```
 
 Each marked function is shown with its source and the reviewer question. For example,
-for `@functional`:
+for `@calculations`:
 
 ```
 Is this a pure function whose formula matches the method described in the paper?

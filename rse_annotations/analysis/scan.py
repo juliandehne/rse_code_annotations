@@ -46,7 +46,7 @@ class Record:
 
 
 def _marked(node: ast.AST) -> List[str]:
-    """Concern names in the decorator list (``@functional``, ``@rse.functional(...)``)."""
+    """Concern names in the decorator list (``@calculations``, ``@rse.calculations(...)``)."""
     tails = (dotted(d).rsplit(".", 1)[-1] for d in node.decorator_list)
     return [t for t in tails if t in CONCERNS]
 
