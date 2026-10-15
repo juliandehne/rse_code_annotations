@@ -4,7 +4,7 @@ The testbed is a real research pipeline: the `lni_study` repository on its branc
 `feat/rse-code-annotations`. On that branch the pipeline functions are marked:
 
 - `src/compute_icr.py`: `@data_input`, `@mapping` (twice), `@data_output`
-- `src/krippendorff_reference.py`: `@functional` (the old name of `@calculations`), `@mapping`
+- `src/krippendorff_reference.py`: `@calculations`, `@mapping`
 
 The rest of its ~320 functions are unmarked. That makes it a good check of the
 "detected but not marked" list: model calls to SAIA/OpenAI, seeded sampling, reading

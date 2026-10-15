@@ -1,7 +1,7 @@
 """Run rse_annotations against the testbed: lni_study on its decorated branch.
 
 The branch ``feat/rse-code-annotations`` of lni_study marks real pipeline functions
-(``@functional`` (now ``@calculations``), ``@mapping``, ``@data_input``, ``@data_output``). This script clones it
+(``@calculations``, ``@mapping``, ``@data_input``, ``@data_output``). This script clones it
 into a temp directory, runs the analysis (and with ``--inspect`` the review), checks
 that the marked functions were found, and deletes the clone unless ``--keep`` is given.
 
