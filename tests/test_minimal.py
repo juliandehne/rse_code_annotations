@@ -90,3 +90,18 @@ def test_yaml_round_trip(tmp_path):
     v = Verdict("f", 'a "b"\\c.py:1', "functional", "f(...) = x", "accepted", "ok")
     (tmp_path / "i.yaml").write_text(dump([v]), encoding="utf-8")
     assert load(tmp_path / "i.yaml") == [v]
+
+
+def test_hardware_dependency(tmp_path):
+    (tmp_path / "m.py").write_text(textwrap.dedent('''
+        import torch
+
+        def on_gpu(x):
+            return x.to(torch.device("cuda"))
+
+        def data_output_writer(rows):
+            return data_output(rows)
+    '''), encoding="utf-8")
+    recs = {r.qualname: r for r in scan(tmp_path)[0]}
+    assert "hardware_dependency" in recs["on_gpu"].detected
+    assert "hardware_dependency" not in recs["data_output_writer"].detected

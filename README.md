@@ -1,22 +1,13 @@
-# rse_annotations (gen_code_prototype)
+# rse_annotations
 
-Mark the research-relevant concerns of a function with a decorator, then let a static
-scan tell you which functions carry concerns you have not marked, and review the marked
-ones by hand.
-
-This is the minimal prototype. The full version, with test generation, plugins and
-external review, is on `main`.
-
-## Install
-
-```bash
-pip install -e .[dev]
-```
-
-## Mark functions
+Research code mixes plain plumbing with steps that decide whether a result can be
+trusted: model calls, random draws, human-coded data, hardware-dependent numerics. In
+`rse_annotations` you mark those steps with decorators. A static scan then tells you
+which functions carry a concern you have not marked, and an interactive review lets
+someone check the marked ones.
 
 ```python
-from rse_annotations import functional, model_call, stochastic
+from rse_annotations import functional, model_call
 
 @functional
 def scale(x, k):
@@ -27,59 +18,43 @@ def classify(client, text):
     ...
 ```
 
-A decorator only records the concern on the function (`fn.__rse_concerns__`) and returns
-the function unchanged. It works both bare (`@x`) and with metadata (`@x(...)`).
+A decorator only records the concern on the function and returns it unchanged. It works
+bare (`@x`) and with metadata (`@x(...)`). The scan parses the code with `ast` and never
+imports or runs it.
 
-## Run
+## Install
 
 ```bash
-python -m rse_annotations PATH              # coverage report (analysis)
-python -m rse_annotations PATH --json       # the same as JSON
-python -m rse_annotations PATH --inspect    # review marked functions: y / n / s(kip)
-python -m rse_annotations PATH --inspect --concern functional
+pip install -e .[dev]
+python -m pytest -q
 ```
 
-The scan only parses the code with `ast`. It never imports or runs it.
+## Run it
 
-- **Analysis** lists, per function, the concerns that are marked and the ones that are
-  detected. It flags *critical concerns detected but not marked* and *marked but not
-  detected*. Contagious concerns (e.g. `model_call`, `stochastic`) pass to the callers.
-- **Inspection** shows each marked (function, concern) pair: the source, a formula for
-  single-expression `@functional` functions, and the reviewer question. Verdicts go to
-  `inspection.yaml` in the scanned directory and are pre-filled on the next run.
+| Target | Guide |
+|---|---|
+| Any Python project | [docs/RUN_ON_ANY_PROJECT.md](docs/RUN_ON_ANY_PROJECT.md) |
+| The testbed (lni_study, decorated branch) | [docs/RUN_ON_TESTBED.md](docs/RUN_ON_TESTBED.md) |
+| The bundled example project | [docs/RUN_ON_EXAMPLES.md](docs/RUN_ON_EXAMPLES.md) |
+
+In short: `python -m rse_annotations PATH` writes the coverage report,
+`--json` writes it as JSON and `--inspect` starts the review.
 
 ## Layout
 
 ```
 rse_annotations/
-  decorators/_base.py      Concern (the decorator) + FunctionView (what detectors see)
+  decorators/_base.py      Concern (the decorator itself) + FunctionView
   decorators/<concern>/    one folder per concern: vocabulary, detect(), CONCERN
   analysis/                scan + text/JSON report
-  inspection/              interactive review + inspection.yaml
+  inspection/              interactive y/n/s review, writes inspection.yaml
   __main__.py              the runner
+examples/                  small example project
+testbed/                   runs everything against lni_study
+tests/
 ```
 
-## Add a concern
+## Contributing
 
-Create `rse_annotations/decorators/<name>/__init__.py`:
-
-```python
-from .._base import Concern
-
-def detect(v):                     # v is a FunctionView of the function body
-    hits = v.hits(tokens=("mlflow",))
-    return (f"logs to {hits[0]}", "medium") if hits else None
-
-CONCERN = Concern("experiment_tracking",
-                  "Is every logged run traceable to code and data versions?",
-                  detect, critical=False, contagious=False)
-```
-
-It is discovered automatically and becomes importable as
-`from rse_annotations import experiment_tracking`.
-
-## Test
-
-```bash
-python -m pytest -q
-```
+To add a concern, create a new folder under `rse_annotations/decorators/`. The
+step-by-step tutorial is [HOW_TO_CONTRIBUTE.md](HOW_TO_CONTRIBUTE.md).
