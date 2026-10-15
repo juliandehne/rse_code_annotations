@@ -81,22 +81,16 @@ before you trust a vocabulary.
 Write it as a statement, not a question: `--inspect` asks the reviewer
 `Does the assertion "..." hold?`. The registry refuses a concern without one.
 
-## Step 3: Declare the concern
+**Confidence.** Return `"high"` only for evidence that is hard to misread: unmarked
+high-confidence detections are listed in the text report, all others only in `--json`.
 
-At the bottom of `HardwareDependency.py`, create the one instance. It is the decorator users import:
+## Step 3: Nothing to register
 
-```python
-CONCERN = HardwareDependency("hardware_dependency")
-```
-
-- `name`: must equal the folder name.
-- `detect` (step 2): return `"high"` as confidence only for evidence
-  that is hard to misread: unmarked high-confidence detections are listed in the text
-  report, all others only in `--json`.
-
-That's all. There is no list to edit: `decorators/registry.py` imports every
-sub-package's `<ClassName>.py` and reads its `CONCERN`. It refuses a `name` that differs
-from the folder name and a subclass without an `assertion`.
+The file ends with the class. You do not create an instance and there is no list to
+edit: `decorators/registry.py` imports every sub-package's `<ClassName>.py` and creates
+the one instance itself, `HardwareDependency("hardware_dependency")`, named after the
+folder. That instance is the decorator users import. The registry refuses a file without
+a matching `Concern` subclass and a subclass without an `assertion`.
 
 ## Step 4: Use it in an example
 
@@ -168,7 +162,7 @@ python -m pytest -q
 
 ## Checklist for a pull request
 
-- [ ] `rse_annotations/decorators/<name>/<Name>.py` (class name = file name): a `Concern` subclass with `assertion` and `detect`, and `CONCERN`
+- [ ] `rse_annotations/decorators/<name>/<Name>.py` (class name = file name): a `Concern` subclass with `assertion` and `detect`
 - [ ] `name` equals the folder name; `assertion` is a statement a reviewer can confirm or reject
 - [ ] a must-fire and a must-not-fire test
 - [ ] detections on a real project read through and acceptable

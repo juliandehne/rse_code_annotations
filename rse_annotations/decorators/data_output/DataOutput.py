@@ -14,6 +14,3 @@ class DataOutput(Concern):
         specific = [w for w in v.writes if w not in GENERIC_IO]
         hint = "" if specific else " (may be a logger/stream, not a file)"
         return f"writes {', '.join(v.writes[:3])}{hint}", "high" if specific else "medium"
-
-
-CONCERN = DataOutput("data_output")

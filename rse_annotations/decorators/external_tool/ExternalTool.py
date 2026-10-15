@@ -18,6 +18,3 @@ class ExternalTool(Concern):
         shell = any(isinstance(n, ast.keyword) and n.arg == "shell"
                     and getattr(n.value, "value", None) is True for n in ast.walk(v.node))
         return f"shells out ({', '.join(hits[:2])}){' with shell=True' if shell else ''}", "high"
-
-
-CONCERN = ExternalTool("external_tool")

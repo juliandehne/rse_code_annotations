@@ -13,6 +13,3 @@ class ModelCall(Concern):
     def detect(self, v):
         hits = v.hits(TOKENS, CALLS)
         return (f"calls a language model: {', '.join(hits[:2])}", "high") if hits else None
-
-
-CONCERN = ModelCall("model_call")

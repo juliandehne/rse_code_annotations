@@ -12,6 +12,3 @@ class Mapping(Concern):
             return "returns a value but also prints: report/format helper", "low"
         calls = f" (calls {', '.join(sorted(v.called)[:3])})" if v.called else ""
         return f"input in, transformed value out, no I/O{calls}", "medium"
-
-
-CONCERN = Mapping("mapping")

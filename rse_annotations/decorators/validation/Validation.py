@@ -15,6 +15,3 @@ class Validation(Concern):
         if any(isinstance(n, (ast.Raise, ast.Assert)) for n in ast.walk(v.node)):
             return "guards a data invariant (raises/asserts)", "high"
         return "named like a guard", "medium"
-
-
-CONCERN = Validation("validation")

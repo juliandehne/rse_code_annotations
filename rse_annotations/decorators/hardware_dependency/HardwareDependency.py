@@ -13,6 +13,3 @@ class HardwareDependency(Concern):
         if hits:
             return f"selects or uses an accelerator ({', '.join(hits[:2])})", "medium"
         return None
-
-
-CONCERN = HardwareDependency("hardware_dependency")

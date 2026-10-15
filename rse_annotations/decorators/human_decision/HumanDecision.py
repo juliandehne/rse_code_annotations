@@ -12,6 +12,3 @@ class HumanDecision(Concern):
         if hits:
             return f"asks a person ({', '.join(hits[:2])})", "high" if "input" in hits else "medium"
         return None
-
-
-CONCERN = HumanDecision("human_decision")

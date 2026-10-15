@@ -24,6 +24,3 @@ class HumanInput(Concern):
         if files:
             return f"reads human-coded data ({', '.join(files[:2])})", "high"
         return "named for human-coded data and reads a source", "medium"
-
-
-CONCERN = HumanInput("human_input")

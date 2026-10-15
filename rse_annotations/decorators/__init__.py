@@ -2,7 +2,7 @@
 
 A new concern is a new folder ``decorators/<name>/`` with one file ``<Name>.py`` (the class
 name, as in Java) whose class ``<Name>`` subclasses :class:`Concern`, sets ``assertion``,
-implements ``detect`` and defines ``CONCERN = <Name>("<name>")``.
+and implements ``detect``. The registry creates the instance ``<Name>("<name>")``.
 Nothing else needs registering.
 """
 from ._base import Concern, FunctionView

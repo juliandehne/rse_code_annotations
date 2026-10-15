@@ -29,6 +29,3 @@ class Statistical(Concern):
         if any(t in v.name for t in NAME_HINTS) and v.returns and not v.does_io and computes:
             return "name suggests a reported statistic", "medium"
         return None
-
-
-CONCERN = Statistical("statistical")

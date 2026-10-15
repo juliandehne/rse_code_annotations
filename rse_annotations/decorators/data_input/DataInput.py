@@ -11,6 +11,3 @@ class DataInput(Concern):
         specific = [r for r in v.reads if r not in GENERIC_IO]
         hint = "" if specific else " (may be a stream, not a file)"
         return f"reads {', '.join(v.reads[:3])}{hint}", "high" if specific else "medium"
-
-
-CONCERN = DataInput("data_input")

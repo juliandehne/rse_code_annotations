@@ -1,7 +1,9 @@
-"""Find the concerns: every sub-package of ``decorators/`` and its ``CONCERN``.
+"""Find the concerns: one instance per sub-package of ``decorators/``.
 
 As in Java, the file is named after the class it implements: folder ``hardware_dependency``
-holds ``HardwareDependency.py`` with ``class HardwareDependency(Concern)``.
+holds ``HardwareDependency.py`` with ``class HardwareDependency(Concern)``. The registry
+creates the one instance, ``HardwareDependency("hardware_dependency")``: that instance is
+the decorator users import.
 """
 import importlib
 import pkgutil
@@ -22,11 +24,10 @@ def load() -> Dict[str, Concern]:
     for m in pkgutil.iter_modules([str(Path(__file__).parent)]):
         if m.ispkg:
             cls = class_name(m.name)
-            c = importlib.import_module(f"{__package__}.{m.name}.{cls}").CONCERN
-            if type(c).__name__ != cls:
-                raise ValueError(f"{m.name}/{cls}.py must define class {cls}, not {type(c).__name__}")
-            if c.name != m.name:
-                raise ValueError(f"concern {c.name!r} lives in folder {m.name!r}")
+            sub = getattr(importlib.import_module(f"{__package__}.{m.name}.{cls}"), cls, None)
+            if not (isinstance(sub, type) and issubclass(sub, Concern)):
+                raise ValueError(f"{m.name}/{cls}.py must define class {cls}(Concern)")
+            c = sub(m.name)
             if not getattr(c, "assertion", ""):
                 raise ValueError(f"concern {c.name!r} sets no assertion")
             concerns[c.name] = c

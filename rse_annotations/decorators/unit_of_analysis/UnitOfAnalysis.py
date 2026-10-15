@@ -21,6 +21,3 @@ class UnitOfAnalysis(Concern):
                 and any(isinstance(n, ast.comprehension) and n.ifs for n in ast.walk(v.node))):
             return "filters in a comprehension: may change the sample size", "low"
         return None
-
-
-CONCERN = UnitOfAnalysis("unit_of_analysis")

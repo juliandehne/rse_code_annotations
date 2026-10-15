@@ -44,6 +44,3 @@ class Stochastic(Concern):
         if seed:
             return f"draws on an RNG ({', '.join(hits[:3])}), seeded via `{seed}`", "high"
         return f"draws on an RNG ({', '.join(hits[:3])}) with no seed parameter", "high"
-
-
-CONCERN = Stochastic("stochastic")

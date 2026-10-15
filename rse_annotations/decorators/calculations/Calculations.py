@@ -20,6 +20,3 @@ class Calculations(Concern):
         if not v.called:
             return "pure: arithmetic only, no I/O, returns a value", "high"
         return f"pure: arithmetic + {', '.join(sorted(v.called)[:3])}, no I/O", "medium"
-
-
-CONCERN = Calculations("calculations")
