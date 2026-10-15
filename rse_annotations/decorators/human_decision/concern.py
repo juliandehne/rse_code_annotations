@@ -5,6 +5,8 @@ CALLS = {"input", "confirm", "prompt", "getpass"}
 
 
 class HumanDecision(Concern):
+    assertion = "The judgement, the decider and the time are recorded."
+
     def detect(self, v):
         hits = sorted(v.called & CALLS)
         if hits:
@@ -12,6 +14,4 @@ class HumanDecision(Concern):
         return None
 
 
-CONCERN = HumanDecision(
-    "human_decision",
-    "Are the judgement, the decider and the time recorded?")
+CONCERN = HumanDecision("human_decision")

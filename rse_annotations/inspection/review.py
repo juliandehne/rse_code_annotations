@@ -46,7 +46,7 @@ def review(root, concern: Optional[str] = None, input_fn: Callable[[str], str] =
         output_fn(rec.source)
         if v.formula:
             output_fn(f"  formula: {v.formula}")
-        output_fn(f"  {CONCERNS[k].help}")
+        output_fn(f'  Does the assertion "{CONCERNS[k].assertion.rstrip(".")}" hold?')
         v.verdict = _ask(f"  [y]es / [n]o / [s]kip (default {v.verdict}): ", v.verdict, input_fn, output_fn)
         results.append(v)
         kept = [o for o in old.values() if o.key not in {r.key for r in results}]

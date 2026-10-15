@@ -3,6 +3,8 @@ from .._base import GENERIC_IO, Concern
 
 
 class DataOutput(Concern):
+    assertion = "Everything a reader needs to regenerate this output is written alongside it."
+
     def detect(self, v):
         if not v.writes:
             return None
@@ -14,6 +16,4 @@ class DataOutput(Concern):
         return f"writes {', '.join(v.writes[:3])}{hint}", "high" if specific else "medium"
 
 
-CONCERN = DataOutput(
-    "data_output",
-    "Is everything a reader needs to regenerate this output written alongside it?")
+CONCERN = DataOutput("data_output")

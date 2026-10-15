@@ -6,6 +6,8 @@ TOKENS = ("cuda", "gpu", "tf.device", "torch.device", "jax.devices", "cupy",
 
 
 class HardwareDependency(Concern):
+    assertion = "Device, driver and precision are recorded, and the result holds on other hardware."
+
     def detect(self, v):
         hits = v.hits(TOKENS)
         if hits:
@@ -13,6 +15,4 @@ class HardwareDependency(Concern):
         return None
 
 
-CONCERN = HardwareDependency(
-    "hardware_dependency",
-    "Are the device, driver and precision recorded, and does the result hold on other hardware?")
+CONCERN = HardwareDependency("hardware_dependency")

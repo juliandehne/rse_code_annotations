@@ -9,6 +9,8 @@ CALLS = {"Popen", "check_output", "check_call", "getoutput", "getstatusoutput"}
 
 
 class ExternalTool(Concern):
+    assertion = "The tool and its version are recorded, and a missing binary fails loudly."
+
     def detect(self, v):
         hits = v.hits(TOKENS, CALLS)
         if not hits:
@@ -18,6 +20,4 @@ class ExternalTool(Concern):
         return f"shells out ({', '.join(hits[:2])}){' with shell=True' if shell else ''}", "high"
 
 
-CONCERN = ExternalTool(
-    "external_tool",
-    "The tool and its version are part of the method: are they recorded, and does a missing binary fail loudly?")
+CONCERN = ExternalTool("external_tool")

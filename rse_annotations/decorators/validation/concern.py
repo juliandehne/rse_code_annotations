@@ -7,6 +7,8 @@ PREFIXES = ("check_", "validate_", "verify_", "ensure_", "assert_", "is_valid")
 
 
 class Validation(Concern):
+    assertion = "This guard is actually called somewhere in the pipeline."
+
     def detect(self, v):
         if not v.name.startswith(PREFIXES):
             return None
@@ -15,6 +17,4 @@ class Validation(Concern):
         return "named like a guard", "medium"
 
 
-CONCERN = Validation(
-    "validation",
-    "Is this guard actually called? A guard nobody invokes is worse than no guard.")
+CONCERN = Validation("validation")

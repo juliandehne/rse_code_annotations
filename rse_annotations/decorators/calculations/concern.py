@@ -12,6 +12,8 @@ MATH_SAFE = {
 
 
 class Calculations(Concern):
+    assertion = "This is a pure function whose formula matches the method described in the paper."
+
     def detect(self, v):
         if v.does_io or not v.returns or not v.params or v.called - MATH_SAFE:
             return None
@@ -20,6 +22,4 @@ class Calculations(Concern):
         return f"pure: arithmetic + {', '.join(sorted(v.called)[:3])}, no I/O", "medium"
 
 
-CONCERN = Calculations(
-    "calculations",
-    "Is this a pure function whose formula matches the method described in the paper?")
+CONCERN = Calculations("calculations")

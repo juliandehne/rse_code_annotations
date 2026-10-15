@@ -10,6 +10,8 @@ LOAD_CALLS = {"read_csv", "read_excel", "read_json", "read_parquet", "read_text"
 
 
 class HumanInput(Concern):
+    assertion = "Coders, codebook version and inter-coder reliability are recorded for this human-produced data."
+
     def detect(self, v):
         # file-name-like literals only: a sentence that mentions the gold standard is not evidence
         files = sorted({n.value for n in ast.walk(v.node)
@@ -24,6 +26,4 @@ class HumanInput(Concern):
         return "named for human-coded data and reads a source", "medium"
 
 
-CONCERN = HumanInput(
-    "human_input",
-    "Data was produced by people: are coders, codebook version and inter-coder reliability recorded?")
+CONCERN = HumanInput("human_input")

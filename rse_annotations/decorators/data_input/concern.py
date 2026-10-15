@@ -3,6 +3,8 @@ from .._base import GENERIC_IO, Concern
 
 
 class DataInput(Concern):
+    assertion = "The source is documented (path, version, provenance) and its format is validated on entry."
+
     def detect(self, v):
         if not v.reads or v.writes:   # read-and-write is reported as data_output
             return None
@@ -11,6 +13,4 @@ class DataInput(Concern):
         return f"reads {', '.join(v.reads[:3])}{hint}", "high" if specific else "medium"
 
 
-CONCERN = DataInput(
-    "data_input",
-    "Is the source documented (path, version, provenance) and is its format validated on entry?")
+CONCERN = DataInput("data_input")

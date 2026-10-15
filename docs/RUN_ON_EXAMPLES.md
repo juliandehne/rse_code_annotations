@@ -50,11 +50,12 @@ python -m rse_annotations examples --inspect
 python -m rse_annotations examples --inspect --concern calculations
 ```
 
-Each marked function is shown with its source and the reviewer question. For example,
+Each marked function is shown with its source, and the reviewer confirms or rejects the
+concern's assertion. For example,
 for `@calculations`:
 
 ```
-Is this a pure function whose formula matches the method described in the paper?
+Does the assertion "This is a pure function whose formula matches the method described in the paper" hold?
 [y]es / [n]o / [s]kip (default pending):
 ```
 

@@ -49,17 +49,17 @@ def test_decorators_mark_and_return_the_function():
     assert g.__rse_concerns__ == (("mapping", {"fields": {"x": "in"}}),)
 
 
-def test_every_concern_is_a_folder_with_help_and_detector():
+def test_every_concern_is_a_folder_with_assertion_and_detector():
     assert {"calculations", "data_input", "model_call", "stochastic"} <= set(CONCERNS)
     for c in CONCERNS.values():
-        assert c.help and callable(c.detect)
+        assert c.assertion and callable(c.detect)
 
 
 def test_concern_without_detect_cannot_be_instantiated():
     class Incomplete(Concern):
         pass
     with pytest.raises(TypeError):
-        Incomplete("incomplete", "?")
+        Incomplete("incomplete")
 
 
 def test_scan_marks_and_detection(tmp_path):

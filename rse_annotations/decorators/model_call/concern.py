@@ -8,11 +8,11 @@ CALLS = {"OpenAI", "AzureOpenAI", "Anthropic", "ChatCompletion", "ChatOpenAI"}
 
 
 class ModelCall(Concern):
+    assertion = "Model, version, prompt and parameters of this language-model call are recorded."
+
     def detect(self, v):
         hits = v.hits(TOKENS, CALLS)
         return (f"calls a language model: {', '.join(hits[:2])}", "high") if hits else None
 
 
-CONCERN = ModelCall(
-    "model_call",
-    "Output came from a language model: are model, version, prompt and parameters recorded?")
+CONCERN = ModelCall("model_call")

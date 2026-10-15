@@ -10,6 +10,8 @@ NAME_HINTS = ("filter", "select", "exclude", "subset", "narrow", "prune", "restr
 
 
 class UnitOfAnalysis(Concern):
+    assertion = "Every dropped record has a documented reason."
+
     def detect(self, v):
         hits = sorted(v.called & CALLS)
         if hits:
@@ -21,6 +23,4 @@ class UnitOfAnalysis(Concern):
         return None
 
 
-CONCERN = UnitOfAnalysis(
-    "unit_of_analysis",
-    "Does every dropped record have a documented reason?")
+CONCERN = UnitOfAnalysis("unit_of_analysis")

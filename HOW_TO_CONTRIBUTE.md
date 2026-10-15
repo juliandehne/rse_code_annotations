@@ -59,6 +59,8 @@ TOKENS = ("cuda", "gpu", "tf.device", "torch.device", "jax.devices", "cupy",
 
 
 class HardwareDependency(Concern):
+    assertion = "Device, driver and precision are recorded, and the result holds on other hardware."
+
     def detect(self, v):
         hits = v.hits(TOKENS)
         if hits:
@@ -71,25 +73,26 @@ first version of this concern also had `"tpu"`, and it fired on every call to
 `data_output` (da**ta_ou**tput → `tpu`). Run the analysis on a real project (step 5)
 before you trust a vocabulary.
 
+**The assertion.** `assertion` is what a function marked `@hardware_dependency` claims.
+Write it as a statement, not a question: `--inspect` asks the reviewer
+`Does the assertion "..." hold?`. The registry refuses a concern without one.
+
 ## Step 3: Declare the concern
 
 At the bottom of `concern.py`, create the one instance. It is the decorator users import:
 
 ```python
-CONCERN = HardwareDependency(
-    "hardware_dependency",
-    "Are the device, driver and precision recorded, and does the result hold on other hardware?")
+CONCERN = HardwareDependency("hardware_dependency")
 ```
 
 - `name`: must equal the folder name.
-- `help`: the question the reviewer answers in `--inspect`.
 - `detect` (step 2): return `"high"` as confidence only for evidence
   that is hard to misread: unmarked high-confidence detections are listed in the text
   report, all others only in `--json`.
 
 That's all. There is no list to edit: `decorators/registry.py` imports every
 sub-package's `concern.py` and reads its `CONCERN`. It refuses a `name` that differs
-from the folder name.
+from the folder name and a subclass without an `assertion`.
 
 ## Step 4: Use it in an example
 
@@ -161,7 +164,7 @@ python -m pytest -q
 
 ## Checklist for a pull request
 
-- [ ] `rse_annotations/decorators/<name>/concern.py`: a `Concern` subclass with `detect`, and `CONCERN`
-- [ ] `name` equals the folder name; `help` is a question a reviewer can answer
+- [ ] `rse_annotations/decorators/<name>/concern.py`: a `Concern` subclass with `assertion` and `detect`, and `CONCERN`
+- [ ] `name` equals the folder name; `assertion` is a statement a reviewer can confirm or reject
 - [ ] a must-fire and a must-not-fire test
 - [ ] detections on a real project read through and acceptable

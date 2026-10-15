@@ -3,6 +3,8 @@ from .._base import Concern
 
 
 class Mapping(Concern):
+    assertion = "This transformation keeps every record and field it should, and nothing else."
+
     def detect(self, v):
         if v.does_io or not v.returns or not v.params:
             return None
@@ -12,6 +14,4 @@ class Mapping(Concern):
         return f"input in, transformed value out, no I/O{calls}", "medium"
 
 
-CONCERN = Mapping(
-    "mapping",
-    "Does this transformation keep every record and field it should, and nothing else?")
+CONCERN = Mapping("mapping")

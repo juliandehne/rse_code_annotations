@@ -34,6 +34,8 @@ def _seed(v):
 
 
 class Stochastic(Concern):
+    assertion = "The seed is an explicit parameter, so the result can be regenerated."
+
     def detect(self, v):
         hits = sorted(v.called & RNG_CALLS)
         if not hits or _only_jitter(v.node):
@@ -44,6 +46,4 @@ class Stochastic(Concern):
         return f"draws on an RNG ({', '.join(hits[:3])}) with no seed parameter", "high"
 
 
-CONCERN = Stochastic(
-    "stochastic",
-    "Output depends on an RNG: is the seed an explicit parameter, so the result can be regenerated?")
+CONCERN = Stochastic("stochastic")

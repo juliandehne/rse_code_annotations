@@ -17,6 +17,8 @@ ARITH = (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Pow, ast.Mod)
 
 
 class Statistical(Concern):
+    assertion = "This statistic is pinned against a reference implementation or its cited definition."
+
     def detect(self, v):
         hits = v.hits(TOKENS, CALLS)
         if hits:
@@ -29,6 +31,4 @@ class Statistical(Concern):
         return None
 
 
-CONCERN = Statistical(
-    "statistical",
-    "Is this statistic pinned against a reference implementation or its cited definition?")
+CONCERN = Statistical("statistical")

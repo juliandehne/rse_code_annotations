@@ -10,7 +10,7 @@ from __future__ import annotations
 import ast
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import List, Optional, Set, Tuple
+from typing import ClassVar, List, Optional, Set, Tuple
 
 #: What a detector returns when it fires: (reason, confidence).
 Evidence = Tuple[str, str]
@@ -29,15 +29,17 @@ GENERIC_IO = {"write", "read", "writelines", "readline", "readlines"}
 
 @dataclass(frozen=True)
 class Concern(ABC):
-    """One concern: its name, the reviewer's question, and its detector.
+    """One concern: its name, the assertion a reviewer confirms, and its detector.
 
-    Abstract: every concern subclasses it and implements :meth:`detect`.
+    Abstract: every concern subclasses it, sets :attr:`assertion` and implements
+    :meth:`detect`.
     The instance *is* the decorator: ``@calculations`` and ``@calculations(fields=...)``
     both record the concern on the function and return it unchanged.
     """
 
     name: str
-    help: str
+    #: What a marked function claims; ``--inspect`` asks whether it holds. Set per subclass.
+    assertion: ClassVar[str]
 
     @abstractmethod
     def detect(self, v: "FunctionView") -> Optional[Evidence]:

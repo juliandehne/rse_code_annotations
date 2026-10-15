@@ -15,6 +15,8 @@ def load() -> Dict[str, Concern]:
             c = importlib.import_module(f"{__package__}.{m.name}.concern").CONCERN
             if c.name != m.name:
                 raise ValueError(f"concern {c.name!r} lives in folder {m.name!r}")
+            if not getattr(c, "assertion", ""):
+                raise ValueError(f"concern {c.name!r} sets no assertion")
             concerns[c.name] = c
     return concerns
 
