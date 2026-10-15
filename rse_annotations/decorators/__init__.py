@@ -1,19 +1,11 @@
-"""The concerns: one sub-package per decorator, found automatically.
+"""The concerns: one sub-package per decorator, found automatically by :mod:`.registry`.
 
-A new concern is a new folder ``decorators/<name>/__init__.py`` that defines
-``CONCERN = Concern("<name>", help, detect, ...)``. Nothing else needs registering.
+A new concern is a new folder ``decorators/<name>/`` whose ``concern.py`` subclasses
+:class:`Concern`, implements ``detect`` and defines ``CONCERN = <Subclass>("<name>", help)``.
+Nothing else needs registering.
 """
-import importlib
-import pkgutil
-
 from ._base import Concern, FunctionView
+from .registry import CONCERNS
 
-#: name -> Concern, in folder order.
-CONCERNS = {}
-for _m in pkgutil.iter_modules(__path__):
-    if _m.ispkg:
-        _c = importlib.import_module(f"{__name__}.{_m.name}").CONCERN
-        CONCERNS[_c.name] = _c
-        globals()[_c.name] = _c
-
+globals().update(CONCERNS)  # so that ``from rse_annotations import calculations`` works
 __all__ = ["CONCERNS", "Concern", "FunctionView", *CONCERNS]

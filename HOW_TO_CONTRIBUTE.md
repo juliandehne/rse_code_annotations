@@ -4,7 +4,7 @@ A concern is one folder under `rse_annotations/decorators/`. The folder holds bo
 decorator and a static detector, and it is discovered automatically. This tutorial
 builds `hardware_dependency` from scratch. That concern is already in the repo, so you
 can compare your result with
-[`rse_annotations/decorators/hardware_dependency/__init__.py`](rse_annotations/decorators/hardware_dependency/__init__.py).
+[`rse_annotations/decorators/hardware_dependency/concern.py`](rse_annotations/decorators/hardware_dependency/concern.py).
 
 **The concern.** A result that depends on the hardware it ran on (GPU vs CPU, driver,
 precision) is not reproducible unless that dependency is recorded. A reviewer should
@@ -14,15 +14,24 @@ hardware?*
 ## Step 1: Create the folder
 
 ```
-rse_annotations/decorators/hardware_dependency/__init__.py
+rse_annotations/decorators/hardware_dependency/__init__.py   # only a one-line docstring
+rse_annotations/decorators/hardware_dependency/concern.py    # the logic
 ```
+
+`__init__.py` only makes the folder a package; it holds no code. Everything goes into
+`concern.py`.
 
 The folder name must be a valid Python identifier, because users will import it as
 `from rse_annotations import hardware_dependency`.
 
 ## Step 2: Write the detector
 
-A detector gets a `FunctionView` of the function **body** and returns either `None` or
+A concern is a subclass of the abstract base class `Concern`. `Concern.detect` is an
+abstract method (`@abstractmethod`, the Python counterpart of an `abstract` method in
+Java): a subclass that does not implement it cannot be instantiated and fails with
+`TypeError: Can't instantiate abstract class ...`.
+
+`detect` gets a `FunctionView` of the function **body** and returns either `None` or
 a pair `(reason, confidence)`. The confidence is one of `"high"`, `"medium"` or `"low"`.
 
 What a `FunctionView` offers (see `decorators/_base.py`):
@@ -49,11 +58,12 @@ TOKENS = ("cuda", "gpu", "tf.device", "torch.device", "jax.devices", "cupy",
           "set_memory_growth", "mixed_precision")
 
 
-def detect(v):
-    hits = v.hits(TOKENS)
-    if hits:
-        return f"selects or uses an accelerator ({', '.join(hits[:2])})", "medium"
-    return None
+class HardwareDependency(Concern):
+    def detect(self, v):
+        hits = v.hits(TOKENS)
+        if hits:
+            return f"selects or uses an accelerator ({', '.join(hits[:2])})", "medium"
+        return None
 ```
 
 **Avoid short tokens.** Tokens are matched as substrings of the dotted call path. A
@@ -63,23 +73,23 @@ before you trust a vocabulary.
 
 ## Step 3: Declare the concern
 
-At the bottom of the same file:
+At the bottom of `concern.py`, create the one instance. It is the decorator users import:
 
 ```python
-CONCERN = Concern(
+CONCERN = HardwareDependency(
     "hardware_dependency",
-    "Are the device, driver and precision recorded, and does the result hold on other hardware?",
-    detect)
+    "Are the device, driver and precision recorded, and does the result hold on other hardware?")
 ```
 
 - `name`: must equal the folder name.
 - `help`: the question the reviewer answers in `--inspect`.
-- `detect`: the function from step 2. Return `"high"` as confidence only for evidence
+- `detect` (step 2): return `"high"` as confidence only for evidence
   that is hard to misread: unmarked high-confidence detections are listed in the text
   report, all others only in `--json`.
 
-That's all. There is no registry to edit: `decorators/__init__.py` imports every
-sub-package and reads its `CONCERN`.
+That's all. There is no list to edit: `decorators/registry.py` imports every
+sub-package's `concern.py` and reads its `CONCERN`. It refuses a `name` that differs
+from the folder name.
 
 ## Step 4: Use it in an example
 
@@ -151,7 +161,7 @@ python -m pytest -q
 
 ## Checklist for a pull request
 
-- [ ] `rse_annotations/decorators/<name>/__init__.py` with `detect` and `CONCERN`
+- [ ] `rse_annotations/decorators/<name>/concern.py`: a `Concern` subclass with `detect`, and `CONCERN`
 - [ ] `name` equals the folder name; `help` is a question a reviewer can answer
 - [ ] a must-fire and a must-not-fire test
 - [ ] detections on a real project read through and acceptable

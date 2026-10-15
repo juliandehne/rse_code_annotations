@@ -1,14 +1,16 @@
 """What every concern shares: the :class:`Concern` object and a view of a function body.
 
-A concern is one folder under ``decorators/``. It is a decorator (``@x`` or
-``@x(fields=...)``; it only marks the function) plus a static detector that says, from
-the AST alone, whether a function looks like it carries that concern.
+A concern is one folder under ``decorators/`` with a ``concern.py``: a subclass of
+:class:`Concern` whose instance is the decorator (``@x`` or ``@x(fields=...)``; it only
+marks the function) and whose ``detect`` says, from the AST alone, whether a function
+looks like it carries that concern.
 """
 from __future__ import annotations
 
 import ast
-from dataclasses import dataclass, field
-from typing import Callable, List, Optional, Set, Tuple
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import List, Optional, Set, Tuple
 
 #: What a detector returns when it fires: (reason, confidence).
 Evidence = Tuple[str, str]
@@ -26,16 +28,20 @@ GENERIC_IO = {"write", "read", "writelines", "readline", "readlines"}
 
 
 @dataclass(frozen=True)
-class Concern:
+class Concern(ABC):
     """One concern: its name, the reviewer's question, and its detector.
 
+    Abstract: every concern subclasses it and implements :meth:`detect`.
     The instance *is* the decorator: ``@calculations`` and ``@calculations(fields=...)``
     both record the concern on the function and return it unchanged.
     """
 
     name: str
     help: str
-    detect: Callable[["FunctionView"], Optional[Evidence]] = field(repr=False)
+
+    @abstractmethod
+    def detect(self, v: "FunctionView") -> Optional[Evidence]:
+        """``(reason, confidence)`` if ``v`` looks like it carries this concern, else None."""
 
     def __call__(self, fn=None, **meta):
         def mark(f):

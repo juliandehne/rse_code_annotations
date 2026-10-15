@@ -44,8 +44,9 @@ In short: `python -m rse_annotations PATH` writes the coverage report,
 
 ```
 rse_annotations/
-  decorators/_base.py      Concern (the decorator itself) + FunctionView
-  decorators/<concern>/    one folder per concern: vocabulary, detect(), CONCERN
+  decorators/_base.py      Concern (abstract base class, the decorator itself) + FunctionView
+  decorators/registry.py   finds the concern folders
+  decorators/<concern>/    one folder per concern; concern.py: vocabulary, Concern subclass, CONCERN
   analysis/                scan + text/JSON report
   inspection/              interactive y/n/s review, writes inspection.yaml
   __main__.py              the runner

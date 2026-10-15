@@ -1,7 +1,9 @@
 import json
 import textwrap
 
-from rse_annotations import CONCERNS, calculations, mapping
+import pytest
+
+from rse_annotations import CONCERNS, Concern, calculations, mapping
 from rse_annotations.__main__ import main
 from rse_annotations.analysis import scan
 from rse_annotations.inspection import formula, review
@@ -51,6 +53,13 @@ def test_every_concern_is_a_folder_with_help_and_detector():
     assert {"calculations", "data_input", "model_call", "stochastic"} <= set(CONCERNS)
     for c in CONCERNS.values():
         assert c.help and callable(c.detect)
+
+
+def test_concern_without_detect_cannot_be_instantiated():
+    class Incomplete(Concern):
+        pass
+    with pytest.raises(TypeError):
+        Incomplete("incomplete", "?")
 
 
 def test_scan_marks_and_detection(tmp_path):
