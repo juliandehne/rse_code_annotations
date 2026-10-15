@@ -1,6 +1,7 @@
 """What every concern shares: the :class:`Concern` object and a view of a function body.
 
-A concern is one folder under ``decorators/`` with a ``concern.py``: a subclass of
+A concern is one folder under ``decorators/`` holding one file named after its class (``Stochastic.py``):
+a subclass of
 :class:`Concern` whose instance is the decorator (``@x`` or ``@x(fields=...)``; it only
 marks the function) and whose ``detect`` says, from the AST alone, whether a function
 looks like it carries that concern.

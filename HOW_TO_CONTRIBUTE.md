@@ -4,7 +4,7 @@ A concern is one folder under `rse_annotations/decorators/`. The folder holds bo
 decorator and a static detector, and it is discovered automatically. This tutorial
 builds `hardware_dependency` from scratch. That concern is already in the repo, so you
 can compare your result with
-[`rse_annotations/decorators/hardware_dependency/concern.py`](rse_annotations/decorators/hardware_dependency/concern.py).
+[`rse_annotations/decorators/hardware_dependency/HardwareDependency.py`](rse_annotations/decorators/hardware_dependency/HardwareDependency.py).
 
 **The concern.** A result that depends on the hardware it ran on (GPU vs CPU, driver,
 precision) is not reproducible unless that dependency is recorded. A reviewer should
@@ -15,11 +15,15 @@ hardware?*
 
 ```
 rse_annotations/decorators/hardware_dependency/__init__.py   # only a one-line docstring
-rse_annotations/decorators/hardware_dependency/concern.py    # the logic
+rse_annotations/decorators/hardware_dependency/HardwareDependency.py    # the logic
 ```
 
 `__init__.py` only makes the folder a package; it holds no code. Everything goes into
-`concern.py`.
+`HardwareDependency.py`.
+
+As in Java, the file is named after the class it implements: the folder name in
+CamelCase (`hardware_dependency` → `HardwareDependency`). The registry derives the file
+name from the folder and refuses a file whose class has a different name.
 
 The folder name must be a valid Python identifier, because users will import it as
 `from rse_annotations import hardware_dependency`.
@@ -79,7 +83,7 @@ Write it as a statement, not a question: `--inspect` asks the reviewer
 
 ## Step 3: Declare the concern
 
-At the bottom of `concern.py`, create the one instance. It is the decorator users import:
+At the bottom of `HardwareDependency.py`, create the one instance. It is the decorator users import:
 
 ```python
 CONCERN = HardwareDependency("hardware_dependency")
@@ -91,7 +95,7 @@ CONCERN = HardwareDependency("hardware_dependency")
   report, all others only in `--json`.
 
 That's all. There is no list to edit: `decorators/registry.py` imports every
-sub-package's `concern.py` and reads its `CONCERN`. It refuses a `name` that differs
+sub-package's `<ClassName>.py` and reads its `CONCERN`. It refuses a `name` that differs
 from the folder name and a subclass without an `assertion`.
 
 ## Step 4: Use it in an example
@@ -164,7 +168,7 @@ python -m pytest -q
 
 ## Checklist for a pull request
 
-- [ ] `rse_annotations/decorators/<name>/concern.py`: a `Concern` subclass with `assertion` and `detect`, and `CONCERN`
+- [ ] `rse_annotations/decorators/<name>/<Name>.py` (class name = file name): a `Concern` subclass with `assertion` and `detect`, and `CONCERN`
 - [ ] `name` equals the folder name; `assertion` is a statement a reviewer can confirm or reject
 - [ ] a must-fire and a must-not-fire test
 - [ ] detections on a real project read through and acceptable
