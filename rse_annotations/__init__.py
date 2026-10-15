@@ -11,8 +11,9 @@ imported: ``from rse_annotations import calculations`` calls :func:`__getattr__`
 creates that one instance via the registry.
 """
 from .decorators import Concern, FunctionView, load, load_one, names
+from .project import Project
 
-__all__ = ["Concern", "FunctionView", "load", "load_one", "names"]
+__all__ = ["Concern", "FunctionView", "Project", "load", "load_one", "names"]
 
 
 def __getattr__(name: str) -> Concern:

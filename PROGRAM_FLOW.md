@@ -18,7 +18,8 @@ global `CONCERNS`. `tests/test_minimal.py::test_import_loads_no_concern` checks 
 | 1 | `rse_annotations/__main__.py` `main()` | entry point of every option below |
 | 2 | `decorators/registry.py` `load()` | build the concern table once: `{name: Concern}` |
 | 3 | `__main__.py` | build the argument parser; `--concern` choices are the table's keys |
-| 4 | `__main__.py` | dispatch to the analysis or the inspection, passing the table along |
+| 4 | `rse_annotations/project.py` `Project(path, concerns)` | the code under audit: resolved root, the concern table, the verdict file next to the code |
+| 5 | `__main__.py` | dispatch to the analysis or the inspection with that project |
 
 `load()` does the following:
 
@@ -32,11 +33,11 @@ global `CONCERNS`. `tests/test_minimal.py::test_import_loads_no_concern` checks 
 
 ## Default / `--analyze`: coverage report
 
-`main()` → `scan(path, concerns)` → `to_text(records, errors, concerns)` → `print`
+`main()` → `project.scan()` → `to_text(records, errors, project.concerns)` → `print`
 
 | Step | File | Purpose |
 |---|---|---|
-| 1 | `analysis/scan.py` `scan()` | walk all `*.py` files under `PATH` (skips `SKIP_DIRS`, `test_*`, `conftest.py`, `setup.py`) |
+| 1 | `project.py` `Project.scan()` → `analysis/scan.py` `scan(project)` | the scan engine, run over `Project.files()`: all `*.py` files under `PATH` (skips `SKIP_DIRS`, `test_*`, `conftest.py`, `setup.py`) |
 | 2 | `scan.py` | read and `ast.parse` each file; the code is **never imported or run**. Parse failures go into the error list |
 | 3 | `scan.py` `_functions()` | yield every top-level function and method with its qualified name |
 | 4 | `decorators/_base.py` `FunctionView.of(node)` | one pass over the function **body**: parameters, returns, called names, dotted call paths, file reads/writes |
@@ -53,18 +54,18 @@ ignored together with `--inspect`.
 
 ## `--inspect` (optionally `--concern NAME`): interactive review
 
-`main()` → `review(path, concerns, concern)`
+`main()` → `review(project, concern)`
 
 | Step | File | Purpose |
 |---|---|---|
-| 1 | `inspection/review.py` `review()` | locate `inspection.yaml` next to the scanned code |
-| 2 | `inspection/verdicts.py` `load()` | read earlier verdicts (missing file → none); they become the defaults |
-| 3 | `analysis/scan.py` `scan()` | same scan as above; only `Record.marked` is used |
+| 1 | `inspection/review.py` `review()` | drives the review of one `Project` |
+| 2 | `Project.verdicts()` → `inspection/verdicts.py` `load()` | read earlier verdicts from `Project.verdict_file` (missing file → none); they become the defaults |
+| 3 | `Project.scan()` | same scan as above; only `Record.marked` is used |
 | 4 | `review.py` | build the to-do list: one entry per (function, marked concern), filtered by `--concern` |
 | 5 | `review.py` `formula()` | for `calculations` only: `f(...) = <expr>` if the body is a single `return` |
 | 6 | `review.py` | print the source and ask `Does the assertion "<concern.assertion>" hold?` |
 | 7 | `review.py` `_ask()` | read `[y]es / [n]o / [s]kip`; empty input keeps the earlier verdict |
-| 8 | `inspection/verdicts.py` `dump()` | rewrite `inspection.yaml` after **every** answer (an interrupted review loses nothing); verdicts of functions not reviewed this time are kept |
+| 8 | `Project.save()` → `inspection/verdicts.py` `dump()` | rewrite `inspection.yaml` after **every** answer (an interrupted review loses nothing); verdicts of functions not reviewed this time are kept |
 | 9 | `review.py` | print the counts (accepted / declined / pending) |
 
 ## Using the decorators in research code
@@ -91,7 +92,8 @@ Only imports and definitions. Nothing reads files, walks directories or creates 
 
 | Module | Defined on import |
 |---|---|
-| `rse_annotations/__init__.py` | re-exports `Concern`, `FunctionView`, `load`, `load_one`, `names`; defines `__getattr__` |
+| `rse_annotations/__init__.py` | re-exports `Concern`, `FunctionView`, `Project`, `load`, `load_one`, `names`; defines `__getattr__` |
+| `project.py` | `SKIP_DIRS`; dataclass `Project` |
 | `__main__.py` | defines `main()`; it runs only under `python -m` (the `if __name__ == "__main__"` guard) |
 | `decorators/__init__.py` | re-exports from `_base` and `registry` |
 | `decorators/_base.py` | `Evidence` type alias; I/O vocabularies (`READ_CALLS`, `WRITE_CALLS`, prefixes, `NOT_FILE_IO`, `GENERIC_IO`); classes `Concern`, `FunctionView`; helpers |
@@ -99,7 +101,7 @@ Only imports and definitions. Nothing reads files, walks directories or creates 
 | `decorators/<name>/__init__.py` | a docstring only |
 | `decorators/<name>/<ClassName>.py` | vocabulary constants (`TOKENS`, `RNG_CALLS`, `SEED_PARAMS`, ...) and the `Concern` subclass; imported only by `load_one` |
 | `analysis/__init__.py` | re-exports `scan`, `Record`, `Finding`, `to_text`, `to_json` |
-| `analysis/scan.py` | `SKIP_DIRS`; dataclasses `Finding`, `Record`; functions |
+| `analysis/scan.py` | dataclasses `Finding`, `Record`; functions |
 | `analysis/report.py` | functions |
 | `inspection/__init__.py` | re-exports `review`, `formula`, `Verdict` |
 | `inspection/review.py` | `ANSWERS` (y/n/s → verdict); functions |

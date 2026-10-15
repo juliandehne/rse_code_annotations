@@ -2,9 +2,10 @@
 import argparse
 import sys
 
-from .analysis import scan, to_json, to_text
+from .analysis import to_json, to_text
 from .decorators import load
 from .inspection import review
+from .project import Project
 
 
 def main(argv=None) -> int:
@@ -17,10 +18,11 @@ def main(argv=None) -> int:
     p.add_argument("--json", action="store_true", help="analysis as JSON")
     p.add_argument("--concern", choices=list(concerns), help="inspect only this concern")
     args = p.parse_args(argv)
+    project = Project(args.path, concerns)
     if args.inspect:
-        review(args.path, concerns, args.concern)
+        review(project, args.concern)
     else:
-        records, errors = scan(args.path, concerns)
+        records, errors = project.scan()
         print(to_json(records, errors) if args.json else to_text(records, errors, concerns))
     return 0
 

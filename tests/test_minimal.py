@@ -3,10 +3,9 @@ import textwrap
 
 import pytest
 
-from rse_annotations import Concern, calculations, mapping
+from rse_annotations import Concern, Project, calculations, mapping
 from rse_annotations import load as load_concerns
 from rse_annotations.__main__ import main
-from rse_annotations.analysis import scan
 from rse_annotations.inspection import formula, review
 from rse_annotations.inspection.verdicts import Verdict, dump, load
 
@@ -66,7 +65,7 @@ def test_concern_without_detect_cannot_be_instantiated():
 
 
 def test_scan_marks_and_detection(tmp_path):
-    recs = {r.qualname: r for r in scan(_write(tmp_path), CONCERNS)[0]}
+    recs = {r.qualname: r for r in Project(_write(tmp_path), CONCERNS).scan()[0]}
     assert recs["scale"].marked == ["calculations"] and "calculations" in recs["scale"].detected
     assert "calculations" not in recs["leaky"].detected          # marked but not detected
     assert recs["ask"].detected["model_call"].confidence == "high"
@@ -91,10 +90,10 @@ def test_formula():
 def test_review_saves_and_prefills(tmp_path):
     root = _write(tmp_path)
     answers = iter(["y", "n"])
-    review(root, CONCERNS, input_fn=lambda _: next(answers), output_fn=lambda _: None)
+    review(Project(root, CONCERNS), input_fn=lambda _: next(answers), output_fn=lambda _: None)
     saved = {v.function: v.verdict for v in load(root / "inspection.yaml")}
     assert saved == {"scale": "accepted", "leaky": "declined"}
-    again = review(root, CONCERNS, input_fn=lambda _: "", output_fn=lambda _: None)  # defaults kept
+    again = review(Project(root, CONCERNS), input_fn=lambda _: "", output_fn=lambda _: None)  # defaults kept
     assert [v.verdict for v in again] == ["accepted", "declined"]
 
 
@@ -114,7 +113,7 @@ def test_hardware_dependency(tmp_path):
         def data_output_writer(rows):
             return data_output(rows)
     '''), encoding="utf-8")
-    recs = {r.qualname: r for r in scan(tmp_path, CONCERNS)[0]}
+    recs = {r.qualname: r for r in Project(tmp_path, CONCERNS).scan()[0]}
     assert "hardware_dependency" in recs["on_gpu"].detected
     assert "hardware_dependency" not in recs["data_output_writer"].detected
 

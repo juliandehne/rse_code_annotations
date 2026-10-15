@@ -51,6 +51,7 @@ rse_annotations/
   decorators/registry.py   load(): finds the concern folders, creates one instance each
   decorators/<concern>/    one folder per concern; <ClassName>.py: vocabulary, Concern subclass
                            (assertion + detect()); the registry instantiates it
+  project.py               Project: the code under audit, its concerns and its verdict file
   analysis/                scan + text/JSON report
   inspection/              interactive y/n/s review, writes inspection.yaml
   __main__.py              the runner

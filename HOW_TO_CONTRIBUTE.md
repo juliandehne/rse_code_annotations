@@ -141,8 +141,7 @@ cover one case that must fire and one that must not:
 ```python
 import textwrap
 
-from rse_annotations.analysis import scan
-from rse_annotations.decorators import load
+from rse_annotations import Project, load
 
 
 def test_hardware_dependency(tmp_path):
@@ -155,7 +154,7 @@ def test_hardware_dependency(tmp_path):
         def data_output_writer(rows):
             return data_output(rows)
     '''), encoding="utf-8")
-    recs = {r.qualname: r for r in scan(tmp_path, load())[0]}
+    recs = {r.qualname: r for r in Project(tmp_path, load()).scan()[0]}
     assert "hardware_dependency" in recs["on_gpu"].detected
     assert "hardware_dependency" not in recs["data_output_writer"].detected
 ```

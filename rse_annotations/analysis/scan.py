@@ -6,15 +6,14 @@ Nothing is imported or executed. Every ``*.py`` file under the root is parsed wi
 from __future__ import annotations
 
 import ast
-import os
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Dict, List, Set, Tuple
+from typing import TYPE_CHECKING, Dict, List, Set, Tuple
 
 from ..decorators import Concern, FunctionView
 from ..decorators._base import dotted
 
-SKIP_DIRS = {"__pycache__", "venv", "env", "node_modules", "tests", "build", "dist"}
+if TYPE_CHECKING:
+    from ..project import Project
 
 
 @dataclass
@@ -60,26 +59,11 @@ def _functions(body, prefix=""):
                 yield f"{prefix}{node.name}", node
 
 
-def _python_files(root: Path):
-    if root.is_file():
-        yield root
-        return
-    for dirpath, dirs, files in os.walk(root):
-        dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS and not d.startswith("."))
-        for f in sorted(files):
-            if f.endswith(".py") and not f.startswith("test_") and f not in ("conftest.py", "setup.py"):
-                yield Path(dirpath) / f
-
-
-def scan(root, concerns: Dict[str, Concern]) -> Tuple[List[Record], List[str]]:
-    """Scan ``root`` (a directory or one file) for ``concerns`` (from ``decorators.load()``).
-
-    Returns (records, parse errors).
-    """
-    root = Path(root).resolve()
-    base = root.parent if root.is_file() else root
+def scan(project: "Project") -> Tuple[List[Record], List[str]]:
+    """Scan the project's files for its concerns. Returns (records, parse errors)."""
+    concerns, base = project.concerns, project.base
     records, errors = [], []
-    for path in _python_files(root):
+    for path in project.files():
         try:
             source = path.read_text(encoding="utf-8")
             tree = ast.parse(source, filename=str(path))

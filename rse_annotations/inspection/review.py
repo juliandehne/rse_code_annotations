@@ -6,12 +6,12 @@ Static like the analysis: the target is parsed, never imported. Answers go to
 from __future__ import annotations
 
 import ast
-from pathlib import Path
-from typing import Callable, Dict, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 
-from ..analysis import scan
-from ..decorators import Concern
 from . import verdicts as vs
+
+if TYPE_CHECKING:
+    from ..project import Project
 
 ANSWERS = {"y": "accepted", "yes": "accepted", "n": "declined", "no": "declined",
            "s": "pending", "skip": "pending"}
@@ -29,14 +29,12 @@ def formula(source: str) -> str:
     return ""
 
 
-def review(root, concerns: Dict[str, Concern], concern: Optional[str] = None,
+def review(project: "Project", concern: Optional[str] = None,
            input_fn: Callable[[str], str] = input,
            output_fn: Callable[[str], None] = print) -> list:
     """Walk every marked function (optionally only ``concern``) and record a verdict each."""
-    root = Path(root).resolve()
-    store = (root.parent if root.is_file() else root) / vs.VERDICT_FILE
-    old = {v.key: v for v in vs.load(store)}
-    records, _ = scan(root, concerns)
+    old = {v.key: v for v in project.verdicts()}
+    records, _ = project.scan()
     todo = [(r, k) for r in records for k in r.marked if concern in (None, k)]
     results = []
     for i, (rec, k) in enumerate(todo, 1):
@@ -47,13 +45,13 @@ def review(root, concerns: Dict[str, Concern], concern: Optional[str] = None,
         output_fn(rec.source)
         if v.formula:
             output_fn(f"  formula: {v.formula}")
-        output_fn(f'  Does the assertion "{concerns[k].assertion.rstrip(".")}" hold?')
+        output_fn(f'  Does the assertion "{project.concerns[k].assertion.rstrip(".")}" hold?')
         v.verdict = _ask(f"  [y]es / [n]o / [s]kip (default {v.verdict}): ", v.verdict, input_fn, output_fn)
         results.append(v)
         kept = [o for o in old.values() if o.key not in {r.key for r in results}]
-        store.write_text(vs.dump(results + kept), encoding="utf-8")
+        project.save(results + kept)
     counts = ", ".join(f"{sum(r.verdict == d for r in results)} {d}" for d in vs.VERDICTS)
-    output_fn(f"\n{len(results)} reviewed: {counts}. Saved to {store}" if results
+    output_fn(f"\n{len(results)} reviewed: {counts}. Saved to {project.verdict_file}" if results
               else "\nNo marked functions to review.")
     return results
 
