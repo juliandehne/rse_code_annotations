@@ -69,17 +69,14 @@ At the bottom of the same file:
 CONCERN = Concern(
     "hardware_dependency",
     "Are the device, driver and precision recorded, and does the result hold on other hardware?",
-    detect, contagious=True)
+    detect)
 ```
 
 - `name`: must equal the folder name.
 - `help`: the question the reviewer answers in `--inspect`.
-- `critical=True`: unmarked detections of this concern are listed under *Critical
-  concerns detected but not marked*. Use it for concerns that decide whether a result
-  can be trusted or regenerated, e.g. `model_call`, `stochastic` or `statistical`.
-- `contagious=True`: callers inherit the concern (`inherits from add_on_gpu`). Use it
-  when the concern describes *where a value comes from*. A function that calls a
-  GPU-dependent function returns a GPU-dependent result too.
+- `detect`: the function from step 2. Return `"high"` as confidence only for evidence
+  that is hard to misread: unmarked high-confidence detections are listed in the text
+  report, all others only in `--json`.
 
 That's all. There is no registry to edit: `decorators/__init__.py` imports every
 sub-package and reads its `CONCERN`.
@@ -156,6 +153,5 @@ python -m pytest -q
 
 - [ ] `rse_annotations/decorators/<name>/__init__.py` with `detect` and `CONCERN`
 - [ ] `name` equals the folder name; `help` is a question a reviewer can answer
-- [ ] `critical` / `contagious` chosen deliberately
 - [ ] a must-fire and a must-not-fire test
 - [ ] detections on a real project read through and acceptable

@@ -53,13 +53,13 @@ def test_every_concern_is_a_folder_with_help_and_detector():
         assert c.help and callable(c.detect)
 
 
-def test_scan_marks_detection_and_propagation(tmp_path):
+def test_scan_marks_and_detection(tmp_path):
     recs = {r.qualname: r for r in scan(_write(tmp_path))[0]}
     assert recs["scale"].marked == ["calculations"] and "calculations" in recs["scale"].detected
     assert "calculations" not in recs["leaky"].detected          # marked but not detected
     assert recs["ask"].detected["model_call"].confidence == "high"
     run = recs["run"].detected
-    assert run["model_call"].indirect and "no seed" in run["stochastic"].reason
+    assert "model_call" not in run and "no seed" in run["stochastic"].reason
 
 
 def test_runner_text_and_json(tmp_path, capsys):

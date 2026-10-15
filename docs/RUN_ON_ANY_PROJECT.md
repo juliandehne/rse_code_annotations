@@ -18,16 +18,14 @@ python -m rse_annotations /tmp/target
 The report has three parts:
 
 1. **Coverage table**: for each concern, how many functions are marked, how many look
-   like they carry it (detected), and how many of those are unmarked. Concerns with
-   `*` are critical.
-2. **Critical concerns detected but not marked**: one line per function, with the
-   evidence and a confidence. `inherits from X` means the function calls `X`, which
-   carries a contagious concern such as `model_call` or `stochastic`.
+   like they carry it (detected), and how many of those are unmarked.
+2. **Detected with high confidence but not marked**: one line per function, with the
+   evidence. Medium- and low-confidence detections are only in `--json`.
 3. **Marked but not detected**: marks the scan cannot confirm. Either the mark is wrong
    or the code has changed.
 
 An undecorated project has 0 marked functions, so the report is a list of candidates
-for marking. Start with the critical ones.
+for marking. Start with the high-confidence ones.
 
 Scope rules: nested functions, `__dunder__` methods and `test_*` functions are skipped.
 Files that do not parse are listed as errors at the end.
@@ -39,7 +37,7 @@ python -m rse_annotations /tmp/target --json > coverage.json
 ```
 
 The output has one entry per function: `qualname`, `file` (relative to the target),
-`lineno`, `marked` and `detected` (concern → reason, confidence, indirect).
+`lineno`, `marked` and `detected` (concern → reason, confidence).
 
 ## 3. Mark and re-run
 

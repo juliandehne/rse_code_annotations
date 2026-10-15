@@ -15,4 +15,4 @@ def detect(v):
 CONCERN = Concern(
     "model_call",
     "Output came from a language model: are model, version, prompt and parameters recorded?",
-    detect, critical=True, contagious=True)
+    detect)

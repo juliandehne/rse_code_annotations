@@ -31,17 +31,11 @@ class Concern:
 
     The instance *is* the decorator: ``@calculations`` and ``@calculations(fields=...)``
     both record the concern on the function and return it unchanged.
-
-    ``critical`` concerns decide whether a result can be trusted and regenerated.
-    ``contagious`` ones answer *where did this value come from?*, so a caller inherits
-    them through the call graph.
     """
 
     name: str
     help: str
     detect: Callable[["FunctionView"], Optional[Evidence]] = field(repr=False)
-    critical: bool = False
-    contagious: bool = False
 
     def __call__(self, fn=None, **meta):
         def mark(f):
@@ -84,7 +78,7 @@ class FunctionView:
     writes: List[str]
     called: Set[str]     # bare call names: ``shuffle``
     dotted: List[str]    # dotted call paths: ``client.chat.completions.create``
-
+    
     @classmethod
     def of(cls, node: ast.AST) -> "FunctionView":
         body = ast.Module(body=node.body, type_ignores=[])   # not the decorator list

@@ -20,4 +20,4 @@ def detect(v):
 CONCERN = Concern(
     "external_tool",
     "The tool and its version are part of the method: are they recorded, and does a missing binary fail loudly?",
-    detect, critical=True, contagious=True)
+    detect)

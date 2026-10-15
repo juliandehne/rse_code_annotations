@@ -26,4 +26,4 @@ def detect(v):
 CONCERN = Concern(
     "human_input",
     "Data was produced by people: are coders, codebook version and inter-coder reliability recorded?",
-    detect, critical=True, contagious=True)
+    detect)

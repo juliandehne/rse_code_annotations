@@ -25,7 +25,10 @@ data_output                  1         1         0
 ...
 hardware_dependency          1         1         0
 ...
-(* critical)
+
+Detected with high confidence but not marked (all detections: --json):
+  sample_pipeline.py:46  impure_sum  @data_input: reads open("r") [high]
+  sample_pipeline.py:93  untidy  @calculations: pure: arithmetic only, no I/O, returns a value [high]
 
 Marked but not detected (check the mark or the code):
   sample_pipeline.py:46  impure_sum  @calculations
@@ -33,7 +36,8 @@ Marked but not detected (check the mark or the code):
 
 The scan confirms every other mark. It flags `impure_sum` because a function that does
 I/O is not a pure `@calculations` function. `unmarked` counts functions that look like they carry a
-concern that is not marked. They are listed with `--json`:
+concern that is not marked. The text report lists only the high-confidence ones; all of
+them are in `--json`:
 
 ```bash
 python -m rse_annotations examples --json
@@ -60,7 +64,7 @@ generated file, so don't commit it.
 ## Use as a test fixture
 
 `tests/test_minimal.py` writes a similar mini-project into a temporary directory and
-checks the same things: detection, propagation, the runner output and the review loop.
+checks the same things: detection, the runner output and the review loop.
 
 ```bash
 python -m pytest -q

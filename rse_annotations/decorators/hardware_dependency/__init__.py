@@ -15,4 +15,4 @@ def detect(v):
 CONCERN = Concern(
     "hardware_dependency",
     "Are the device, driver and precision recorded, and does the result hold on other hardware?",
-    detect, contagious=True)
+    detect)

@@ -19,17 +19,16 @@ def to_text(records: List[Record], errors: List[str]) -> str:
     pct = 100 * len(marked) / len(records) if records else 0
     out = [f"{len(records)} functions, {len(marked)} marked ({pct:.0f}%)", "",
            f"{'concern':<22}{'marked':>8}{'detected':>10}{'unmarked':>10}"]
-    for name, c in CONCERNS.items():
+    for name in CONCERNS:
         m = sum(name in r.marked for r in records)
         d = sum(name in r.detected for r in records)
         u = sum(name in r.detected and name not in r.marked for r in records)
-        out.append(f"{name + (' *' if c.critical else ''):<22}{m:>8}{d:>10}{u:>10}")
-    out.append("(* critical)")
+        out.append(f"{name:<22}{m:>8}{d:>10}{u:>10}")
 
     missing = [(r, k, f) for r in records for k, f in r.detected.items()
-               if CONCERNS[k].critical and k not in r.marked]
+               if f.confidence == "high" and k not in r.marked]
     if missing:
-        out += ["", "Critical concerns detected but not marked:"]
+        out += ["", "Detected with high confidence but not marked (all detections: --json):"]
         out += [f"  {r.location}  {r.qualname}  @{k}: {f.reason} [{f.confidence}]"
                 for r, k, f in missing]
     unconfirmed = [(r, k) for r in records for k in r.marked if k not in r.detected]

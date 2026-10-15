@@ -31,4 +31,4 @@ def detect(v):
 CONCERN = Concern(
     "statistical",
     "Is this statistic pinned against a reference implementation or its cited definition?",
-    detect, critical=True)
+    detect)

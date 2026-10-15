@@ -46,4 +46,4 @@ def detect(v):
 CONCERN = Concern(
     "stochastic",
     "Output depends on an RNG: is the seed an explicit parameter, so the result can be regenerated?",
-    detect, critical=True, contagious=True)
+    detect)

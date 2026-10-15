@@ -21,7 +21,6 @@ SKIP_DIRS = {"__pycache__", "venv", "env", "node_modules", "tests", "build", "di
 class Finding:
     reason: str
     confidence: str
-    indirect: bool = False   # inherited through the call graph
 
 
 @dataclass
@@ -90,24 +89,8 @@ def scan(root) -> Tuple[List[Record], List[str]]:
             records.append(Record(qualname, path.relative_to(base).as_posix(), node.lineno,
                                   _marked(node), detected, view.called,
                                   ast.get_source_segment(source, node) or ""))
-    _propagate(records)
     _flag_uncalled_validations(records)
     return records, errors
-
-
-def _propagate(records: List[Record]) -> None:
-    """Callers inherit contagious concerns (matched by bare function name, so marked indirect)."""
-    contagious = [n for n, c in CONCERNS.items() if c.contagious]
-    changed = True
-    while changed:
-        changed = False
-        carriers = {k: {r.name for r in records if k in r.detected} for k in contagious}
-        for rec in records:
-            for k in contagious:
-                via = sorted((rec.calls & carriers[k]) - {rec.name})
-                if k not in rec.detected and via:
-                    rec.detected[k] = Finding(f"inherits from {', '.join(via[:2])}", "medium", True)
-                    changed = True
 
 
 def _flag_uncalled_validations(records: List[Record]) -> None:
