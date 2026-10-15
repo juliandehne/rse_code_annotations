@@ -1,88 +1,70 @@
-"""Human review of ``@functional`` code: the :class:`Reviewer` loop.
+"""Interactive review of marked functions: one y/n/s answer per (function, concern).
 
-The machine proposes (source + inferred formula), the human decides (accept /
-decline / skip). Verdicts persist in ``inspection.yaml`` next to the code, so the
-review is auditable and a re-run pre-fills the previous answers. Machine evidence
-never goes into that file -- it holds human judgement only.
+Static like the analysis: the target is parsed, never imported. Answers go to
+``inspection.yaml`` next to the scanned code, so a re-run pre-fills them.
 """
-
 from __future__ import annotations
 
-from typing import Callable, List, Optional
+import ast
+from pathlib import Path
+from typing import Callable, Optional
 
-from .formula import infer_formula
-from .verdicts import VERDICTS, Decision, Verdict, VerdictStore, ask_verdict, verdict_summary
-from ..decorators.registry import DecoratorInfo
-from .snippets import extract_snippet
-from ..decorators.markers import HazardDecorator
+from ..analysis import scan
+from ..decorators import CONCERNS
+from . import verdicts as vs
+
+ANSWERS = {"y": "accepted", "yes": "accepted", "n": "declined", "no": "declined",
+           "s": "pending", "skip": "pending"}
 
 
-class Reviewer:
-    """Steps a human through every ``@functional`` and records a verdict for each.
+def formula(source: str) -> str:
+    """``f(...) = <expr>`` when the body is a single return statement, else ``""``."""
+    try:
+        fn = ast.parse(source).body[0]
+    except (SyntaxError, IndexError):
+        return ""
+    body = [n for n in fn.body if not (isinstance(n, ast.Expr) and isinstance(n.value, ast.Constant))]
+    if len(body) == 1 and isinstance(body[0], ast.Return) and body[0].value is not None:
+        return f"{fn.name}(...) = {ast.unparse(body[0].value)}"
+    return ""
 
-    Args:
-        store: Where verdicts are read from and written to.
-        input_fn / output_fn: Injectable I/O (tests pass lists; the CLI passes
-            ``input`` / ``print``).
-    """
 
-    prompt = "Accept this @functional as correct? [y]es / [n]o / [s]kip > "
+def review(root, concern: Optional[str] = None, input_fn: Callable[[str], str] = input,
+           output_fn: Callable[[str], None] = print) -> list:
+    """Walk every marked function (optionally only ``concern``) and record a verdict each."""
+    root = Path(root).resolve()
+    store = (root.parent if root.is_file() else root) / vs.VERDICT_FILE
+    old = {v.key: v for v in vs.load(store)}
+    records, _ = scan(root)
+    todo = [(r, k) for r in records for k in r.marked if concern in (None, k)]
+    results = []
+    for i, (rec, k) in enumerate(todo, 1):
+        v = vs.Verdict(rec.qualname, rec.location, k, formula(rec.source) if k == "functional" else "")
+        if (prev := old.get(v.key)):
+            v.verdict, v.note = prev.verdict, prev.note
+        output_fn(f"\n[{i}/{len(todo)}] @{k}  {rec.qualname}  ({rec.location})")
+        output_fn(rec.source)
+        if v.formula:
+            output_fn(f"  formula: {v.formula}")
+        output_fn(f"  {CONCERNS[k].help}")
+        v.verdict = _ask(f"  [y]es / [n]o / [s]kip (default {v.verdict}): ", v.verdict, input_fn, output_fn)
+        results.append(v)
+        kept = [o for o in old.values() if o.key not in {r.key for r in results}]
+        store.write_text(vs.dump(results + kept), encoding="utf-8")
+    counts = ", ".join(f"{sum(r.verdict == d for r in results)} {d}" for d in vs.VERDICTS)
+    output_fn(f"\n{len(results)} reviewed: {counts}. Saved to {store}" if results
+              else "\nNo marked functions to review.")
+    return results
 
-    def __init__(self, store: VerdictStore, *,
-                 input_fn: Callable[[str], str] = input,
-                 output_fn: Callable[[str], None] = print) -> None:
-        self.store = store
-        self.input_fn = input_fn
-        self.output_fn = output_fn
 
-    def review(self, infos: List[DecoratorInfo]) -> List[Verdict]:
-        """Review the ``@functional`` entries of ``infos``; write and return the verdicts."""
-        out = self.output_fn
-        functional = [i for i in infos if i.concern == HazardDecorator.FUNCTIONAL]
-        previous = self.store.by_function()
-
-        if not functional:
-            out("No @functional decorators found to inspect.")
-            self.store.save([])
-            return []
-
-        verdicts: List[Verdict] = []
-        for idx, info in enumerate(functional, start=1):
-            prior = previous.get((info.name, info.location))
-            formula = self.formula_line(info)
-            self.present(info, formula, prior, idx, len(functional))
-            verdicts.append(Verdict(
-                function=info.name, location=info.location, concern=info.concern,
-                formula=formula, verdict=self.ask(prior.verdict if prior else Decision.PENDING)))
-
-        self.store.save(verdicts)
-        out("")
-        out(f"Recorded {len(verdicts)} verdict(s): {verdict_summary(verdicts)}")
-        out(f"Written to {self.store.path}")
-        return verdicts
-
-    # ---- steps a subclass may override --------------------------------- #
-    @staticmethod
-    def formula_line(info: DecoratorInfo) -> str:
-        res = infer_formula(info)
-        if res.ast_forms:
-            return res.ast_forms[0]
-        if res.sympy_form:
-            return res.sympy_form
-        return "(no closed-form formula could be inferred; inspect the source)"
-
-    def present(self, info: DecoratorInfo, formula: str, prior: Optional[Verdict],
-                idx: int, total: int) -> None:
-        out = self.output_fn
-        out("")
-        out(f"[{idx}/{total}] {info.name}   ({info.location})")
-        out(f"formula: {formula}")
-        if prior and prior.verdict in VERDICTS:
-            out(f"(previously: {prior.verdict})")
-        out("--- source ---")
-        for src_line in extract_snippet(info).source.splitlines():
-            out(f"    {src_line}")
-
-    def ask(self, default: Decision) -> Decision:
-        """One accept/decline/skip answer; EOF or empty input keeps ``default``."""
-        return ask_verdict(self.prompt, default, self.input_fn, self.output_fn)
+def _ask(prompt, default, input_fn, output_fn) -> str:
+    while True:
+        try:
+            answer = input_fn(prompt).strip().lower()
+        except EOFError:
+            return default
+        if not answer:
+            return default
+        if answer in ANSWERS:
+            return ANSWERS[answer]
+        output_fn("  please answer y, n, or s")

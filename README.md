@@ -1,349 +1,85 @@
-# rse_code_annotations
+# rse_annotations (gen_code_prototype)
 
-Role **decorators** for (generated) Python code, plus a small interactive **tool**
-that helps you review the decorated code and scaffold tests for it. No LLM, no
-network.
+Mark the research-relevant concerns of a function with a decorator, then let a static
+scan tell you which functions carry concerns you have not marked, and review the marked
+ones by hand.
 
-See [`CONCEPT.md`](ideas/CONCEPT.md) for the full design rationale.
-
-## Why
-
-Research code is increasingly written by a machine. The scientist who publishes on
-top of it is still the one answerable for whether the result is valid. That gap —
-between who wrote the code and who vouches for it — is what this repository is
-about.
-
-The two obvious answers both fail in practice:
-
-- **Read all of it.** Nobody reviews four thousand lines of plausible-looking
-  generated Python line by line. Not the author, and certainly not a peer reviewer.
-- **Prove all of it.** Formal verification is real, and its cost is far outside what
-  a working research group can pay. (See
-  [`FORMULA_INFERENCE.md`](ideas/FORMULA_INFERENCE.md) for where Dafny/Why3/Coq do fit.)
-
-What makes inspection tractable is that **not all research code carries the
-scientific claim**. Most of it is glue: argument parsing, plotting, moving files
-around. Validity rests on a much smaller subset — the mathematics, and the points
-where data enters and leaves the program. If a generated statistic divides by the
-wrong denominator, the paper is wrong. If the `--help` text is clumsy, it is not.
-
-So mark that subset, and spend the entire inspection budget on it:
-
-1. **Annotate** what carries the claim — a few decorators, nothing else to learn.
-2. **Inspect** it — the tool renders the *formula* the code implies, so you check a
-   line of maths against your intent instead of re-reading an implementation.
-3. **Test** it — a `pytest` stub per review concern, each one calling `skip()` until
-   you fill it in, so nothing passes silently.
-4. **Record** it — verdicts are written to `inspection.yaml`. "A human checked this"
-   becomes a fact in the repository rather than a recollection.
-5. **See what you have *not* looked at** — the coverage report contrasts what is
-   decorated with what, by the shape of its body, should be. An inspection whose
-   blind spots are invisible is indistinguishable from no inspection at all.
-6. **Hand it over** — the same filter serves an outside reviewer (a journal editor,
-   someone reproducing the result). The external review steps them through the marked
-   snippets only, not the whole repository, tells them per concern what to look for —
-   including what the reproducibility of the result hinges on — and records a signed
-   protocol.
-
-The deliberate limits matter as much as the features. There is no LLM and no network
-anywhere in the tool: you do not audit generated code with another generator. The
-formula is *rendered for a human to judge*, never proved. The coverage suggestions
-are a worklist, not a verdict.
-
-The goal is not to make review automatic. It is to make review **finite** — small
-enough that a working researcher will actually do it, and legible enough that
-someone else can see that it was done.
+This is the minimal prototype. The full version, with test generation, plugins and
+external review, is on `main`.
 
 ## Install
 
 ```bash
-pip install -e .            # core, no dependencies — the decorators work immediately
-pip install -e ".[formula]" # + SymPy/latexify for richer formula inference
-pip install -r requirements.txt  # everything: package, formula extras, pytest
+pip install -e .[dev]
 ```
 
-The base install has **no dependencies**: after `pip install` you can import and
-apply the decorators right away. The optional `formula` extra only adds the
-heavier symbolic backends for formula inference (the built-in AST backend needs
-nothing).
-
-The tool is invoked with `python -m rse_annotations` — this needs nothing on
-your PATH; the interpreter finds the installed package via `site-packages`. (A
-`rse-annotations` console script is also installed for convenience, but using it as
-a bare command requires Python's `Scripts` dir on PATH, so the docs use `python -m`.)
-
-## The decorators
+## Mark functions
 
 ```python
-from rse_annotations import functional, mapping, data_input, data_output
+from rse_annotations import functional, model_call, stochastic
 
 @functional
-def normalize(v, lo, hi):
-    "Scale v into [0,1]. :param v: :param lo: :param hi: :returns:"
-    return (v - lo) / (hi - lo)
+def scale(x, k):
+    return x * k
 
-@data_input(fields={"path": "CSV to read", "rows": "parsed records"})
-def load_csv(path):
-    "Read rows. :param path: :returns rows:"
-    with open(path) as fh:
-        ...
+@model_call(model="gpt-4o")
+def classify(client, text):
+    ...
 ```
 
-| Decorator     | Means                                          | Tool support |
-| -------------- | ---------------------------------------------- | ------------ |
-| `@functional`  | pure mathematical function                     | inferred formula shown for inspection; determinism + expected-value test stubs |
-| `@mapping`     | transforms one format/object into another      | shape-transform test stub |
-| `@data_input`  | boundary where data enters (reads a file)      | tmp-file read test stub |
-| `@data_output` | boundary where data leaves (writes a file)     | tmp-file write test stub |
-| `@hardware_dependency` | result depends on the hardware (e.g. a GPU) | points the external review at code that decides reproducibility |
+A decorator only records the concern on the function (`fn.__rse_concerns__`) and returns
+the function unchanged. It works both bare (`@x`) and with metadata (`@x(...)`).
 
-The set is open: more decorators will follow.
-
-In code, the decorator names are also the members of the `HazardDecorator` enum
-(`HazardDecorator.FUNCTIONAL == "functional"`). A new decorator is one function in
-`rse_annotations/decorators/markers.py`, marked `@_concern`; the enum member, the help text
-and the exports are derived from it.
-
-## The tool
-
-Everything that *checks* something is a **plugin** under
-`rse_annotations/plugins/hazards/<name>/`. A plugin offers one or more **modes**:
-*human inspection*, *hazard analysis*, *test generation* and the *external review*. The
-worked example is `human_code_inspection` (every mode); the Responsible-RSE hazards (`licence`,
-`dual_use`, `footprint`, …) are stubs that offer hazard analysis only.
-
-There are two entry points. The **general** one asks for a mode and delegates to
-every plugin that offers it (if several plugins offer inspection or test generation,
-it asks which). Point it at a directory (default: the current one) or a git URL. No
-LLM, no network:
+## Run
 
 ```bash
-python -m rse_annotations path/to/src
+python -m rse_annotations PATH              # coverage report (analysis)
+python -m rse_annotations PATH --json       # the same as JSON
+python -m rse_annotations PATH --inspect    # review marked functions: y / n / s(kip)
+python -m rse_annotations PATH --inspect --concern functional
 ```
 
-```
-Scanned <root>
-Found 7 decorated function(s): 3 @functional, 2 @mapping, 1 @data_input, 1 @data_output
+The scan only parses the code with `ast`. It never imports or runs it.
 
-Choose a mode:
-  1) Human inspection  -- a person reviews flagged code; verdicts are recorded
-  2) Hazard analysis   -- every plugin examines the code and reports findings
-  3) Test generation   -- write test scaffolds
-  4) External review   -- an outside reviewer inspects the marked code; writes a protocol
-```
+- **Analysis** lists, per function, the concerns that are marked and the ones that are
+  detected. It flags *critical concerns detected but not marked* and *marked but not
+  detected*. Contagious concerns (e.g. `model_call`, `stochastic`) pass to the callers.
+- **Inspection** shows each marked (function, concern) pair: the source, a formula for
+  single-expression `@functional` functions, and the reviewer question. Verdicts go to
+  `inspection.yaml` in the scanned directory and are pre-filled on the next run.
 
-The **per-plugin** entry point offers only that plugin's modes plus its extra
-actions — for `human_code_inspection` that is the decorator-coverage report:
-
-```bash
-python -m rse_annotations.plugins.hazards.human_code_inspection path/to/src
-```
+## Layout
 
 ```
-human_code_inspection: choose an action:
-  1) Human inspection
-  2) Hazard analysis
-  3) Test generation
-  4) External review
-  5) Decorator coverage + candidates  (-> decorator_coverage.md)
+rse_annotations/
+  decorators/_base.py      Concern (the decorator) + FunctionView (what detectors see)
+  decorators/<concern>/    one folder per concern: vocabulary, detect(), CONCERN
+  analysis/                scan + text/JSON report
+  inspection/              interactive review + inspection.yaml
+  __main__.py              the runner
 ```
 
-What the modes and the coverage action do for `human_code_inspection`:
+## Add a concern
 
-**Human inspection — review `@functional` decorators.** Each `@functional` snippet is
-shown one at a time with its source and the **inferred formula**, then you accept
-or decline it (`[y]es / [n]o / [s]kip`). This is meant for reviewing *generated*
-code: the formula makes it easy to see whether the maths matches intent. Your
-verdicts are written to `<root>/inspection.yaml` (and re-loaded on the next run so
-prior decisions are shown).
-
-**Test generation — unit-test stubs.** For every decorator, a `pytest` stub is
-generated from the per-kind pattern — `@functional` gets a determinism check plus an
-expected-value scaffold (with the inferred formula as a comment); `@mapping` a
-shape-transform check; `@data_input`/`@data_output` a `tmp_path` read/write check.
-Every stub body calls `pytest.skip(...)`, so nothing silently passes until you fill
-it in. Files are written to `<root>/tests/test_<module>.py` (Python convention).
-
-**Hazard analysis.** Reports findings per facet: decorator coverage, reproducibility
-hazards, `@functional`s without an accepted verdict (static), and conventions, the
-inferred formulas and real I/O of the boundaries (these import the code).
-
-**External review — an outside reviewer inspects the marked code.** Human inspection
-is the *author* checking their own code. The external review is the same kind of
-session for someone else: a journal editor (a JOSS review, say) or a person reproducing
-the result. The marks do the same job in both: they are a **filter** that cuts the code
-a human has to read down to the part that matters. The reviewer does not read the
-repository; it walks through every marked snippet of **every** concern, concern by
-concern. Each concern opens with the question to answer (the decorator's docstring);
-each snippet is shown with the authors' `fields=` notes, their own verdict where one is
-recorded, the hazards the scan found in the body and the source. The reviewer answers
-`[y]es / [n]o / [s]kip` and may add a note. A mark such as `@hardware_dependency` is
-not documentation of the hardware: it tells the reviewer which snippet to read when
-judging whether the result can be reproduced on other hardware.
-
-The answers are written to `<root>/review_protocol.yaml`: reviewer, date, the scope
-(how much of the code is marked — what is not marked was not reviewed) and one finding
-per snippet. It is a separate file from the authors' `inspection.yaml`, and a re-run
-pre-fills the previous answers, so a second review round only touches what changed. The
-session is **static**: nothing is imported or run, so the reviewer needs neither the
-authors' dependencies nor their GPU.
-
-**Decorator coverage.** Inspection and test generation act on what *is* decorated.
-Coverage answers the prior question: **how much of this codebase is decorated at all,
-and what should be decorated next?** It is **purely static** — every `*.py` under the
-root is parsed with `ast`, nothing is imported and nothing is executed — because (a) an
-undecorated function never runs a decorator, so reflection can never see it, and (b)
-research code frequently will not import at all (missing optional dependency, a
-`sys.exit()` at module scope, an API key read at import time).
-
-```
-Decorator coverage for <root>
-  29 file(s), 267 function(s)/method(s) found; 254 eligible
-  decorated: 6/254  (2%)
-
-concern       decorated  candidates
-------------  ---------  ----------
-@functional   1          11
-@mapping      3          113
-@data_input   1          40
-@data_output  1          42
-
-Candidates for a decorator (210)
-suggest       conf  function                  location                      why
-------------  ----  ------------------------  ----------------------------  ----------------------------------
-@functional   high  compute_effective_target  src/topup_goldstandard.py:84  pure: arithmetic only, no I/O
-@data_output  high  save_decisions            src/build_goldstandard.py:474 writes a file/sink: to_csv
-@data_output  low   record_new_category       src/build_goldstandard.py:156 reads open("r") *and* writes open("w")
-                                                                            -- consider splitting
-```
-
-The scan also reports **hazards** per function (`model_call`, `stochastic`,
-`statistical`, …). A function has one decorator and any number of hazards; the two are
-independent. Each hazard is a `HazardKind` in `rse_annotations/scan/hazards.py` (name,
-help text, flags, detector), and the names that count as evidence (`openai`, `shuffle`,
-`cohen_kappa_score`, …) live in `rse_annotations/scan/vocabulary.py`. To teach the scan a
-new library, extend a list there; to add a hazard, write one detector and add one entry
-to `HAZARD_KINDS`.
-
-Each undecorated function gets the kind its **body shape** implies (a file write →
-`@data_output`; a file read → `@data_input`; pure arithmetic → `@functional`; an
-argument-in/value-out transform → `@mapping`), plus a confidence and a stated reason.
-Functions that are neither (`main()`, CLI glue) are listed as explicit *non-candidates*
-so the denominator stays honest, as are the exclusions from it (dunders, nested helpers,
-tests). `open` is judged by its **mode**, not its name. The full report — every candidate,
-untruncated — is written to `<root>/decorator_coverage.md`.
-
-The suggestions are heuristic: a **worklist for review, not a verdict**.
-
-You can skip the menu (both entry points):
-
-```bash
-python -m rse_annotations src --inspect        # human inspection
-python -m rse_annotations src --analyze        # hazard analysis, all plugins
-python -m rse_annotations src --analyze --only human_code_inspection --format json
-python -m rse_annotations src --tests          # test generation (alias: --stubs)
-python -m rse_annotations src --review         # external review (never imports)
-python -m rse_annotations src --coverage       # coverage report (never imports)
-python -m rse_annotations --list               # plugins and the modes they offer
-```
-
-Each feature also has its own start file, which skips the menu. They can be run with
-`-m` or directly as a file (e.g. the IDE's "Run" button):
-
-```bash
-python -m rse_annotations.start_inspection src         # human inspection
-python -m rse_annotations.start_review src             # external review
-python -m rse_annotations.start_analysis src           # hazard analysis
-python -m rse_annotations.start_test_generation src    # test generation
-```
-
-To follow the program flow of a feature, read its start file: each one holds the
-function that does the work (`human_inspection`, `external_review`, `hazard_analysis`,
-`test_generation`) and a `main` that calls it. `rse_annotations/manager.py` holds what
-they share: the `Manager` (the code to check, the plugins, how to talk to the user).
-`cli.py` only parses arguments, shows the menu and calls the same functions.
-
-They can also be used from your own script or a notebook:
+Create `rse_annotations/decorators/<name>/__init__.py`:
 
 ```python
-from rse_annotations.manager import Manager
-from rse_annotations.start_analysis import hazard_analysis
-from rse_annotations.start_inspection import human_inspection
-from rse_annotations.start_review import external_review
-from rse_annotations.start_test_generation import test_generation
+from .._base import Concern
 
-manager = Manager.for_path("src")      # a directory or a git URL; None if it is neither
+def detect(v):                     # v is a FunctionView of the function body
+    hits = v.hits(tokens=("mlflow",))
+    return (f"logs to {hits[0]}", "medium") if hits else None
 
-manager.summary()                      # what the static scan found (imports nothing)
-manager.coverage()                     # -> decorator_coverage.md
-
-human_inspection(manager)              # a person reviews the flagged code
-external_review(manager)               # an outside reviewer; -> review_protocol.yaml
-test_generation(manager)               # write test scaffolds
-exit_code = hazard_analysis(manager, only=["human_code_inspection"], verbose=True)
+CONCERN = Concern("experiment_tracking",
+                  "Is every logged run traceable to code and data versions?",
+                  detect, critical=False, contagious=False)
 ```
 
-Every feature function returns an exit code (0 = fine, 1 = findings or not possible
-here, 2 = wrong input). The two reviews and the test generation take an optional
-plugin name, e.g. `human_inspection(manager, "human_code_inspection")`; without it
-you are asked which plugin to use if several offer the feature.
-
-`--analyze` exits non-zero when a plugin reports a `fail`, so it can gate CI. New
-plugins subclass `rse_annotations.Plugin` and are committed to this project: one folder
-under `rse_annotations/plugins/hazards/<name>/`, added to `plugins/hazards/__init__.py`.
-`human_code_inspection` is the worked example; `_stub.py` explains how to turn a stub
-into a working plugin.
-
-Coverage is also available programmatically:
-
-```python
-from rse_annotations import scan_path, render_coverage_markdown
-
-report = scan_path("path/to/src")
-print(f"{report.coverage:.0%} decorated; {len(report.candidates)} candidates")
-for c in report.candidates:
-    print(f"  @{c.suggested} ({c.confidence}) {c.qualname} at {c.location} -- {c.reason}")
-```
-
-## Formula inference for `@functional`
-
-Human inspection **infers the mathematical formula from the code and shows it for
-inspection** (never a correctness proof). Three backends run best-effort: AST
-rendering (no deps), SymPy symbolic execution (`pip install sympy`), and latexify
-(`pip install latexify-py`). Install both with `pip install -e ".[formula]"`. See
-[`FORMULA_INFERENCE.md`](ideas/FORMULA_INFERENCE.md) for the landscape (why symbolic tools
-recover closed forms for scalar arithmetic, why Krippendorff's α needs a reference
-implementation instead, and where formal verifiers like Dafny/Why3/Coq fit).
-
-## Differential verification
-
-Formula inference *renders* the maths; it does not *prove* it. To pin correctness,
-the library ships a generic differential-testing harness:
-
-```python
-from rse_annotations import differential_check
-
-res = differential_check(candidate=my_impl, reference=trusted_impl,
-                         gen_inputs=lambda rng: (rng.uniform(-9, 9),), trials=200)
-print(res.summary())   # e.g. "200 checked, 0 skipped, worst |delta| 4.4e-16"
-assert res.ok
-```
-
-`candidate` and `reference` are run on the same seeded random inputs; a reference
-that raises (or returns a sentinel) marks a trial out-of-domain and skips it. This
-is how the Krippendorff example below verifies its transparent closed form against
-the external `krippendorff` library — but the harness is domain-agnostic.
-
-## Example: Krippendorff's α
-
-Krippendorff's α is **one worked example**, not part of the framework. It shows the
-honest pipeline for a formula buried inside a third-party library call: isolate the
-maths as a pure `@functional`, let the tool render its formula, and pin it with
-`differential_check` against the trusted library. See the `lni_study` testbed and
-[`FORMULA_INFERENCE.md`](ideas/FORMULA_INFERENCE.md) for the full write-up.
+It is discovered automatically and becomes importable as
+`from rse_annotations import experiment_tracking`.
 
 ## Test
 
 ```bash
-pytest        # network-free; no LLM
+python -m pytest -q
 ```

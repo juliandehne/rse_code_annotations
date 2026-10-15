@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from rse_annotations.decorators.markers import hardware_dependency
+from rse_annotations import hardware_dependency
 
 
 @hardware_dependency

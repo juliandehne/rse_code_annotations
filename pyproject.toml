@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rse-code-annotations"
-version = "0.2.0"
-description = "Role decorators for generated code, with a checking runner, formula inference, and pattern-based test-stub generation."
+version = "0.3.0"
+description = "Concern decorators for generated research code, with a static analysis and a human inspection runner."
 readme = "README.md"
 requires-python = ">=3.9"
 authors = [{ name = "Julian Dehne" }]
@@ -13,11 +13,10 @@ license = { text = "MIT" }
 dependencies = []
 
 [project.optional-dependencies]
-formula = ["sympy>=1.12", "latexify-py>=0.4"]
-dev = ["pytest>=7", "sympy>=1.12", "latexify-py>=0.4"]
+dev = ["pytest>=7"]
 
 [project.scripts]
-rse-annotations = "rse_annotations.cli:main"
+rse-annotations = "rse_annotations.__main__:main"
 
 [tool.setuptools.packages.find]
 include = ["rse_annotations*"]

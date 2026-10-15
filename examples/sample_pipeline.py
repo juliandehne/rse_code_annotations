@@ -1,13 +1,10 @@
-"""Example pipeline exercising every decorator.
+"""Example pipeline using the dataflow concerns.
 
-Point the interactive tool at this directory::
+    python -m rse_annotations examples            # analysis
+    python -m rse_annotations examples --inspect  # human review
 
-    python -m rse_annotations examples
-
-or check it programmatically with ``Audit(TargetProject.from_modules("examples.sample_pipeline")).run()``.
-
-It intentionally includes one *good* and one *problematic* case so the checks show
-both PASS and FAIL/WARN outcomes.
+``impure_sum`` is deliberately mis-marked, so the analysis
+shows a "marked but not detected" mismatch.
 """
 
 from __future__ import annotations
@@ -19,7 +16,7 @@ from typing import Dict, List
 from rse_annotations import data_input, data_output, functional, mapping
 
 
-# --- @functional: pure maths, no I/O (should PASS placement) --------------- #
+# --- @functional: pure maths, no I/O  --------------- #
 
 @functional
 def normalize(value: float, lo: float, hi: float) -> float:
@@ -43,7 +40,7 @@ def mean(values: List[float]) -> float:
     return sum(values) / len(values)
 
 
-# --- @functional that WRONGLY does I/O (should FAIL placement) ------------- #
+# --- @functional that WRONGLY does I/O (analysis: marked but not detected) ------------- #
 
 @functional
 def impure_sum(path: str) -> float:
@@ -52,7 +49,7 @@ def impure_sum(path: str) -> float:
         return sum(float(line) for line in fh)
 
 
-# --- @data_input: reads a file (should PASS placement + io_success) -------- #
+# --- @data_input: reads a file  -------- #
 
 @data_input(fields={"path": "CSV file to read", "rows": "parsed records"})
 def load_csv(path: str) -> List[Dict[str, str]]:
@@ -77,7 +74,7 @@ def coerce_scores(rows: List[Dict[str, str]]) -> List[Dict[str, object]]:
     return [{**r, "score": float(r["score"])} for r in rows]
 
 
-# --- @data_output: writes a file (should PASS placement + io_success) ------ #
+# --- @data_output: writes a file  ------ #
 
 @data_output(fields={"path": "destination JSON file", "records": "data to write"})
 def dump_json(path: str, records: List[Dict[str, object]]) -> None:
@@ -90,7 +87,7 @@ def dump_json(path: str, records: List[Dict[str, object]]) -> None:
         json.dump(records, fh)
 
 
-# --- @mapping missing a docstring (should FAIL docstring check) ------------ #
+# --- @mapping without a docstring -------------------------------------------- #
 
 @mapping
 def untidy(rows):  # noqa: D401,ANN001,ANN201 - intentionally undocumented
