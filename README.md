@@ -40,12 +40,15 @@ python -m pytest -q
 In short: `python -m rse_annotations PATH` writes the coverage report,
 `--json` writes it as JSON and `--inspect` starts the review.
 
+Which files each option calls, and what (nothing) runs on import:
+[PROGRAM_FLOW.md](PROGRAM_FLOW.md).
+
 ## Layout
 
 ```
 rse_annotations/
   decorators/_base.py      Concern (abstract base class, the decorator itself) + FunctionView
-  decorators/registry.py   finds the concern folders
+  decorators/registry.py   load(): finds the concern folders, creates one instance each
   decorators/<concern>/    one folder per concern; <ClassName>.py: vocabulary, Concern subclass
                            (assertion + detect()); the registry instantiates it
   analysis/                scan + text/JSON report

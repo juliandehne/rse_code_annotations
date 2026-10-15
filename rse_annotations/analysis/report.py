@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
-from typing import List
+from typing import Dict, List
 
-from ..decorators import CONCERNS
+from ..decorators import Concern
 from .scan import Record
 
 
@@ -14,12 +14,12 @@ def to_json(records: List[Record], errors: List[str]) -> str:
     return json.dumps({"functions": rows, "parse_errors": errors}, indent=2)
 
 
-def to_text(records: List[Record], errors: List[str]) -> str:
+def to_text(records: List[Record], errors: List[str], concerns: Dict[str, Concern]) -> str:
     marked = [r for r in records if r.marked]
     pct = 100 * len(marked) / len(records) if records else 0
     out = [f"{len(records)} functions, {len(marked)} marked ({pct:.0f}%)", "",
            f"{'concern':<22}{'marked':>8}{'detected':>10}{'unmarked':>10}"]
-    for name in CONCERNS:
+    for name in concerns:
         m = sum(name in r.marked for r in records)
         d = sum(name in r.detected for r in records)
         u = sum(name in r.detected and name not in r.marked for r in records)

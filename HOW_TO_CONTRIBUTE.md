@@ -87,9 +87,12 @@ high-confidence detections are listed in the text report, all others only in `--
 ## Step 3: Nothing to register
 
 The file ends with the class. You do not create an instance and there is no list to
-edit: `decorators/registry.py` imports every sub-package's `<ClassName>.py` and creates
-the one instance itself, `HardwareDependency("hardware_dependency")`, named after the
-folder. That instance is the decorator users import. The registry refuses a file without
+edit: when it is called, `decorators/registry.py` imports every sub-package's
+`<ClassName>.py` and creates the one instance itself,
+`HardwareDependency("hardware_dependency")`, named after the folder. That instance is the
+decorator users import. Nothing is loaded on `import rse_annotations`: the runner calls
+`load()`, and `from rse_annotations import hardware_dependency` loads just that one
+concern. The registry refuses a file without
 a matching `Concern` subclass and a subclass without an `assertion`.
 
 ## Step 4: Use it in an example
@@ -139,6 +142,7 @@ cover one case that must fire and one that must not:
 import textwrap
 
 from rse_annotations.analysis import scan
+from rse_annotations.decorators import load
 
 
 def test_hardware_dependency(tmp_path):
@@ -151,7 +155,7 @@ def test_hardware_dependency(tmp_path):
         def data_output_writer(rows):
             return data_output(rows)
     '''), encoding="utf-8")
-    recs = {r.qualname: r for r in scan(tmp_path)[0]}
+    recs = {r.qualname: r for r in scan(tmp_path, load())[0]}
     assert "hardware_dependency" in recs["on_gpu"].detected
     assert "hardware_dependency" not in recs["data_output_writer"].detected
 ```

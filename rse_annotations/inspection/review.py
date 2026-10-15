@@ -7,10 +7,10 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Dict, Optional
 
 from ..analysis import scan
-from ..decorators import CONCERNS
+from ..decorators import Concern
 from . import verdicts as vs
 
 ANSWERS = {"y": "accepted", "yes": "accepted", "n": "declined", "no": "declined",
@@ -29,13 +29,14 @@ def formula(source: str) -> str:
     return ""
 
 
-def review(root, concern: Optional[str] = None, input_fn: Callable[[str], str] = input,
+def review(root, concerns: Dict[str, Concern], concern: Optional[str] = None,
+           input_fn: Callable[[str], str] = input,
            output_fn: Callable[[str], None] = print) -> list:
     """Walk every marked function (optionally only ``concern``) and record a verdict each."""
     root = Path(root).resolve()
     store = (root.parent if root.is_file() else root) / vs.VERDICT_FILE
     old = {v.key: v for v in vs.load(store)}
-    records, _ = scan(root)
+    records, _ = scan(root, concerns)
     todo = [(r, k) for r in records for k in r.marked if concern in (None, k)]
     results = []
     for i, (rec, k) in enumerate(todo, 1):
@@ -46,7 +47,7 @@ def review(root, concern: Optional[str] = None, input_fn: Callable[[str], str] =
         output_fn(rec.source)
         if v.formula:
             output_fn(f"  formula: {v.formula}")
-        output_fn(f'  Does the assertion "{CONCERNS[k].assertion.rstrip(".")}" hold?')
+        output_fn(f'  Does the assertion "{concerns[k].assertion.rstrip(".")}" hold?')
         v.verdict = _ask(f"  [y]es / [n]o / [s]kip (default {v.verdict}): ", v.verdict, input_fn, output_fn)
         results.append(v)
         kept = [o for o in old.values() if o.key not in {r.key for r in results}]

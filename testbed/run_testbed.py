@@ -19,6 +19,7 @@ from pathlib import Path
 
 from rse_annotations.__main__ import main as run
 from rse_annotations.analysis import scan
+from rse_annotations.decorators import load
 
 REPO = "git@github.com:juliandehne/lni_study.git"
 BRANCH = "feat/rse-code-annotations"
@@ -46,7 +47,7 @@ def main(argv=None) -> int:
         run([str(src)])
         if args.inspect:
             run([str(src), "--inspect"])
-        marked = [r.qualname for r in scan(src)[0] if r.marked]
+        marked = [r.qualname for r in scan(src, load())[0] if r.marked]
         ok = len(marked) >= MIN_MARKED
         print(f"\ntestbed: {len(marked)} marked functions found "
               f"({'ok' if ok else f'expected at least {MIN_MARKED}'})")

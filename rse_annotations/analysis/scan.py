@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Set, Tuple
 
-from ..decorators import CONCERNS, FunctionView
+from ..decorators import Concern, FunctionView
 from ..decorators._base import dotted
 
 SKIP_DIRS = {"__pycache__", "venv", "env", "node_modules", "tests", "build", "dist"}
@@ -44,10 +44,10 @@ class Record:
         return f"{self.file}:{self.lineno}"
 
 
-def _marked(node: ast.AST) -> List[str]:
+def _marked(node: ast.AST, concerns: Dict[str, Concern]) -> List[str]:
     """Concern names in the decorator list (``@calculations``, ``@rse.calculations(...)``)."""
     tails = (dotted(d).rsplit(".", 1)[-1] for d in node.decorator_list)
-    return [t for t in tails if t in CONCERNS]
+    return [t for t in tails if t in concerns]
 
 
 def _functions(body, prefix=""):
@@ -71,8 +71,11 @@ def _python_files(root: Path):
                 yield Path(dirpath) / f
 
 
-def scan(root) -> Tuple[List[Record], List[str]]:
-    """Scan ``root`` (a directory or one file). Returns (records, parse errors)."""
+def scan(root, concerns: Dict[str, Concern]) -> Tuple[List[Record], List[str]]:
+    """Scan ``root`` (a directory or one file) for ``concerns`` (from ``decorators.load()``).
+
+    Returns (records, parse errors).
+    """
     root = Path(root).resolve()
     base = root.parent if root.is_file() else root
     records, errors = [], []
@@ -85,9 +88,9 @@ def scan(root) -> Tuple[List[Record], List[str]]:
             continue
         for qualname, node in _functions(tree.body):
             view = FunctionView.of(node)
-            detected = {name: Finding(*ev) for name, c in CONCERNS.items() if (ev := c.detect(view))}
+            detected = {name: Finding(*ev) for name, c in concerns.items() if (ev := c.detect(view))}
             records.append(Record(qualname, path.relative_to(base).as_posix(), node.lineno,
-                                  _marked(node), detected, view.called,
+                                  _marked(node, concerns), detected, view.called,
                                   ast.get_source_segment(source, node) or ""))
     _flag_uncalled_validations(records)
     return records, errors
